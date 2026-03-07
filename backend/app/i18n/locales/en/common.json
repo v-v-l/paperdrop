@@ -1,0 +1,7 @@
+{
+    "errors.internal": "An internal error occurred.",
+    "errors.not_found": "Resource not found.",
+    "errors.validation": "Validation error.",
+    "errors.unauthorized": "You are not authorized to perform this action.",
+    "errors.rate_limited": "Too many requests. Please try again later."
+}

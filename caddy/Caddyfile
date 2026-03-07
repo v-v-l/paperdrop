@@ -1,0 +1,31 @@
+paperdrop.bp-flow.com {
+    # Backend API + Mini App + Webhook
+    handle /api/* {
+        reverse_proxy 192.168.100.59:8100
+    }
+
+    handle /miniapp/* {
+        reverse_proxy 192.168.100.59:8100
+    }
+
+    handle /health {
+        reverse_proxy 192.168.100.59:8100
+    }
+
+    handle /metrics {
+        reverse_proxy 192.168.100.59:8100
+    }
+
+    handle /docs {
+        reverse_proxy 192.168.100.59:8100
+    }
+
+    handle /openapi.json {
+        reverse_proxy 192.168.100.59:8100
+    }
+
+    # Landing page (static)
+    handle {
+        reverse_proxy 192.168.100.59:8080
+    }
+}

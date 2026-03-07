@@ -1,0 +1,51 @@
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Look for .env in project root (one level above backend/)
+_env_file = Path(__file__).resolve().parents[3] / ".env"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(_env_file),
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/links_to_epub"
+
+    # Redis (ARQ task queue)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Telegram
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_WEBHOOK_URL: str = ""
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+    TELEGRAM_PAYMENT_PROVIDER_TOKEN: str = ""
+
+    # Subscription
+    SUBSCRIPTION_PRICE_CENTS: int = 499
+    FREE_TIER_LIMIT: int = 5
+
+    # Rate limiting (per-user, sliding window)
+    RATE_LIMIT_FREE_MAX: int = 3
+    RATE_LIMIT_FREE_WINDOW: int = 3600  # seconds (1 hour)
+    RATE_LIMIT_PAID_MAX: int = 20
+    RATE_LIMIT_PAID_WINDOW: int = 3600  # seconds (1 hour)
+
+    # Playwright
+    PLAYWRIGHT_ENABLED: bool = True
+
+    # Mini App
+    MINI_APP_URL: str = "https://localhost:3100"
+
+    # Application
+    APP_PORT: int = 8100
+    BASE_URL: str = "http://localhost:8100"
+    TEMP_DIR: str = "/tmp/links_to_epub"
+    LOG_LEVEL: str = "INFO"
+
+
+settings = Settings()

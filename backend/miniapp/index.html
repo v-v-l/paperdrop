@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Links to EPUB</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Tab navigation -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="settings" id="tab-settings"></button>
+    <button class="tab-btn" data-tab="history" id="tab-history"></button>
+    <button class="tab-btn" data-tab="subscription" id="tab-subscription"></button>
+  </nav>
+
+  <!-- Settings tab -->
+  <section class="tab-panel active" id="panel-settings">
+    <div class="welcome" id="welcome-text"></div>
+
+    <p class="section-header" id="label-settings-header"></p>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label" for="kindle-email" id="label-kindle-email"></label>
+        <input class="form-input" type="email" id="kindle-email" placeholder="">
+        <p class="form-hint" id="hint-kindle-email"></p>
+        <p class="form-error" id="error-kindle-email" style="display:none;"></p>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label" id="label-grayscale"></div>
+          <div class="toggle-sublabel" id="hint-grayscale"></div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="grayscale-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btn-save-settings" disabled></button>
+  </section>
+
+  <!-- History tab -->
+  <section class="tab-panel" id="panel-history">
+    <p class="section-header" id="label-history-header"></p>
+    <ul class="history-list" id="history-list"></ul>
+    <div class="spinner" id="history-spinner" style="display:none;"></div>
+    <div class="empty-state" id="history-empty" style="display:none;">
+      <div class="empty-state-icon">&#128214;</div>
+      <p class="empty-state-text" id="label-history-empty"></p>
+    </div>
+  </section>
+
+  <!-- Subscription tab -->
+  <section class="tab-panel" id="panel-subscription">
+    <p class="section-header" id="label-sub-header"></p>
+    <div class="card sub-card" id="sub-card">
+      <div class="spinner" id="sub-spinner"></div>
+    </div>
+  </section>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
