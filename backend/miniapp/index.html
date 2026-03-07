@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Links to EPUB</title>
+  <title>PaperDrop</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -25,8 +25,9 @@
       <div class="form-group">
         <label class="form-label" for="kindle-email" id="label-kindle-email"></label>
         <input class="form-input" type="email" id="kindle-email" placeholder="">
-        <p class="form-hint" id="hint-kindle-email"></p>
+        <p class="form-hint" id="hint-kindle-email"><a href="https://www.amazon.com/sendtokindle" target="_blank" rel="noopener" id="link-kindle-settings"></a></p>
         <p class="form-error" id="error-kindle-email" style="display:none;"></p>
+        <p class="form-hint form-hint--action" id="hint-kindle-whitelist" style="display:none;"></p>
       </div>
 
       <div class="toggle-row">

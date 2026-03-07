@@ -21,6 +21,7 @@ class AuthResponse(BaseModel):
 class SettingsResponse(BaseModel):
     kindle_email: str | None = None
     grayscale_images: bool = True
+    sender_email: str = ""
 
 
 class SettingsUpdate(BaseModel):

@@ -73,9 +73,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Links to EPUB",
+    title="PaperDrop",
     version="0.1.0",
-    description="Telegram bot backend for converting links to EPUB",
+    description="PaperDrop — Telegram bot for converting articles to EPUB",
     lifespan=lifespan,
 )
 

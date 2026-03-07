@@ -5,7 +5,7 @@ with i18n lookups later (ticket-013).
 """
 
 WELCOME_MESSAGE = (
-    "Welcome to Links to EPUB!\n\n"
+    "Welcome to PaperDrop!\n\n"
     "Send me any article URL and I'll convert it to an EPUB file.\n\n"
     "Commands:\n"
     "/help - Usage instructions\n"
@@ -35,7 +35,7 @@ HISTORY_EMPTY = "You have no conversions yet. Send me a URL to get started!"
 
 HISTORY_HEADER = "Your recent conversions:"
 
-SUBSCRIBE_INVOICE_TITLE = "Links to EPUB Pro"
+SUBSCRIBE_INVOICE_TITLE = "PaperDrop Pro"
 SUBSCRIBE_INVOICE_DESCRIPTION = "Unlimited article-to-EPUB conversions for 30 days."
 
 SUBSCRIBE_ALREADY_ACTIVE = (

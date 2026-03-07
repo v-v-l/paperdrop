@@ -1,11 +1,11 @@
 {
-    "welcome": "Welcome to Links to EPUB!\n\nSend me any article URL and I'll convert it to an EPUB file.\n\nCommands:\n/help - Usage instructions\n/settings - Open settings\n/history - Recent conversions\n/status - Subscription status\n/subscribe - Upgrade to premium",
-    "help": "How to use this bot:\n\n1. Send me a link to any article or web page\n2. I'll convert it to EPUB format\n3. You'll receive the file right here in the chat\n\nSupported: any public web page with article content.\n\nPrivacy: Your files are deleted immediately after sending. We only store metadata (URL, title, timestamps) for your conversion history.\n\nDisclaimer: This bot is provided as-is. Content conversion depends on the source page structure and may not always produce perfect results.",
+    "welcome": "Welcome to PaperDrop!\n\nSend me any article URL and I'll convert it to an EPUB file.\n\nCommands:\n/help - Usage instructions\n/settings - Open settings\n/history - Recent conversions\n/status - Subscription status\n/subscribe - Upgrade to premium",
+    "help": "How to use this bot:\n\n1. Send me a link to any article or web page\n2. I'll convert it to EPUB format\n3. You'll receive the file right here in the chat\n\nSend to Kindle: Set your Kindle email in /settings and we'll deliver EPUBs straight to your Kindle library.\n\nSupported: any public web page with article content.\n\nPrivacy: Your files are deleted immediately after sending. We only store metadata (URL, title, timestamps) for your conversion history.\n\nDisclaimer: This bot is provided as-is. Content conversion depends on the source page structure and may not always produce perfect results.",
     "settings_message": "Tap the button below to open settings:",
     "settings_button": "Open Settings",
     "history_empty": "You have no conversions yet. Send me a URL to get started!",
     "history_header": "Your recent conversions:",
-    "subscribe_invoice_title": "Links to EPUB Pro",
+    "subscribe_invoice_title": "PaperDrop Pro",
     "subscribe_invoice_description": "Unlimited article-to-EPUB conversions for 30 days.",
     "subscribe_already_active": "You already have an active subscription!\n\nPlan: Premium\nExpires: {end}\n\nYour subscription will not auto-renew. Use /subscribe again after it expires to renew.",
     "payment_success": "Payment successful! Your premium subscription is now active.\n\nPlan: Premium\nPeriod: {start} - {end}\n\nYou now have unlimited conversions. Enjoy!",
@@ -19,5 +19,7 @@
     "free_limit_reached": "You've reached your free tier limit of {limit} conversions.\n\nUse /subscribe to upgrade to premium for unlimited conversions.",
     "invalid_url": "This URL doesn't look valid. Please send a link starting with http:// or https:// to a public web page.",
     "rate_limited": "You're converting too fast! Please try again in {minutes} minute{plural}.",
-    "error_generic": "Something went wrong. Please try again later."
+    "error_generic": "Something went wrong. Please try again later.",
+    "kindle_sent": "Sent to your Kindle ({email})",
+    "kindle_setup_hint": "To receive articles on your Kindle:\n\n1. Find your Send-to-Kindle email at:\namazon.com/sendtokindle\n(Manage Your Content & Devices > Preferences > Personal Document Settings)\n\n2. Add {sender_email} to your Approved Personal Document E-mail List (same page)\n\n3. That's it! We'll email EPUBs to your Kindle automatically."
 }

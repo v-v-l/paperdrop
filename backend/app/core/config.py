@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_PAID_MAX: int = 20
     RATE_LIMIT_PAID_WINDOW: int = 3600  # seconds (1 hour)
 
+    # Email (Resend — Send-to-Kindle)
+    RESEND_API_KEY: str = ""
+    SENDER_EMAIL: str = "send@paperdrop.bp-flow.com"
+
     # Playwright
     PLAYWRIGHT_ENABLED: bool = True
 

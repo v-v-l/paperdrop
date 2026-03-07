@@ -1,5 +1,5 @@
 /**
- * Telegram Mini App -- Links to EPUB
+ * Telegram Mini App -- PaperDrop
  * Settings, History, and Subscription management.
  */
 
@@ -102,7 +102,7 @@ function populateText() {
   $("label-settings-header").textContent = t("settings.header");
   $("label-kindle-email").textContent = t("settings.kindle_email_label");
   $("kindle-email").placeholder = t("settings.kindle_email_placeholder");
-  $("hint-kindle-email").textContent = t("settings.kindle_email_hint");
+  $("link-kindle-settings").textContent = t("settings.kindle_email_hint");
   $("error-kindle-email").textContent = t("settings.kindle_email_error");
   $("label-grayscale").textContent = t("settings.grayscale_label");
   $("hint-grayscale").textContent = t("settings.grayscale_hint");
@@ -151,12 +151,25 @@ function validateKindleEmail(email) {
 }
 
 /* ===== Settings ===== */
+function updateWhitelistHint(senderEmail, kindleEmail) {
+  var hintEl = $("hint-kindle-whitelist");
+  if (hintEl) {
+    if (kindleEmail && senderEmail) {
+      hintEl.textContent = t("settings.kindle_whitelist_hint", { sender_email: senderEmail });
+      show(hintEl);
+    } else {
+      hide(hintEl);
+    }
+  }
+}
+
 function loadSettings() {
   return api("GET", "/settings").then(function (data) {
     state.settings = data;
     $("kindle-email").value = data.kindle_email || "";
     $("grayscale-toggle").checked = data.grayscale_images;
     $("btn-save-settings").disabled = false;
+    updateWhitelistHint(data.sender_email, data.kindle_email);
   }).catch(function () {
     showToast(t("settings.save_error"));
   });
@@ -184,6 +197,7 @@ function saveSettings() {
   }).then(function (data) {
     state.settings = data;
     showToast(t("settings.save_success"));
+    updateWhitelistHint(data.sender_email, data.kindle_email);
     tg.HapticFeedback.notificationOccurred("success");
   }).catch(function () {
     showToast(t("settings.save_error"));

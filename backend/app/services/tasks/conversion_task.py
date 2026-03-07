@@ -11,6 +11,7 @@ from app.core.metrics import ACTIVE_CONVERSIONS, CONVERSION_DURATION_SECONDS, CO
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
 from app.services.conversion import convert_url
+from app.services.email.kindle_sender import send_to_kindle
 
 logger = create_logger(service="conversion-task")
 
@@ -96,6 +97,34 @@ async def process_conversion(
                 reply_to_message_id=message_id,
             )
 
+        # 5. Send to Kindle if user has kindle_email configured
+        async with session_factory() as session:
+            user_result = await session.get(User, user_id)
+            kindle_email = user_result.kindle_email if user_result else None
+
+        if kindle_email:
+            sent = await send_to_kindle(
+                kindle_email=kindle_email,
+                epub_path=epub_path,
+                title=result.title or "article",
+            )
+            if sent:
+                status_text = f"Delivered to Kindle ({kindle_email})"
+            else:
+                status_text = (
+                    f"Failed to deliver to Kindle ({kindle_email}). "
+                    "The EPUB is available above — you can forward it manually."
+                )
+                logger.warning(
+                    "Kindle delivery failed",
+                    extra={"user_id": user_id, "kindle_email": kindle_email},
+                )
+            await bot.send_message(
+                chat_id=chat_id,
+                text=status_text,
+                reply_to_message_id=message_id,
+            )
+
         elapsed = time.monotonic() - start_time
         CONVERSIONS_TOTAL.labels(status="completed").inc()
         CONVERSION_DURATION_SECONDS.observe(elapsed)
@@ -161,7 +190,7 @@ async def process_conversion(
 
     finally:
         ACTIVE_CONVERSIONS.dec()
-        # 5. Delete temp file (privacy-first)
+        # 6. Delete temp file (privacy-first)
         if epub_path and os.path.exists(epub_path):
             try:
                 os.remove(epub_path)

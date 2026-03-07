@@ -109,6 +109,7 @@ async def get_settings(
     return SettingsResponse(
         kindle_email=user.kindle_email,
         grayscale_images=user.grayscale_images,
+        sender_email=settings.SENDER_EMAIL,
     )
 
 
@@ -140,6 +141,7 @@ async def update_settings(
     return SettingsResponse(
         kindle_email=user.kindle_email,
         grayscale_images=user.grayscale_images,
+        sender_email=settings.SENDER_EMAIL,
     )
 
 
