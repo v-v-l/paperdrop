@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     TELEGRAM_PAYMENT_PROVIDER_TOKEN: str = ""
 
     # Subscription
-    SUBSCRIPTION_PRICE_CENTS: int = 499
+    SUBSCRIPTION_PRICE_STARS: int = 250  # Telegram Stars (~$4.99)
     FREE_TIER_LIMIT: int = 5
 
     # Rate limiting (per-user, sliding window)

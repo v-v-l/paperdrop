@@ -193,21 +193,15 @@ async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
-    if not settings.TELEGRAM_PAYMENT_PROVIDER_TOKEN:
-        await update.message.reply_text(
-            "Payments are not configured yet. Please try again later."
-        )
-        return
-
     payload = f"sub_{user.id}_{int(time.time())}"
-    prices = [LabeledPrice("Links to EPUB Pro (30 days)", settings.SUBSCRIPTION_PRICE_CENTS)]
+    prices = [LabeledPrice("PaperDrop Pro (30 days)", settings.SUBSCRIPTION_PRICE_STARS)]
 
     await update.message.reply_invoice(
         title=_t(update, "subscribe_invoice_title"),
         description=_t(update, "subscribe_invoice_description"),
         payload=payload,
-        provider_token=settings.TELEGRAM_PAYMENT_PROVIDER_TOKEN,
-        currency="USD",
+        provider_token="",  # Empty string = Telegram Stars
+        currency="XTR",  # XTR = Telegram Stars currency
         prices=prices,
     )
 

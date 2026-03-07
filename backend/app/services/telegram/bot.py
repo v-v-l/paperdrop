@@ -1,7 +1,7 @@
 """Telegram bot Application initialization and lifecycle management."""
 
 from logs_flow import ErrorCodes, create_logger, format_error
-from telegram import Bot
+from telegram import Bot, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters
 
 from app.core.config import settings
@@ -99,8 +99,17 @@ async def setup_webhook(application: Application) -> None:
         secret_token=settings.TELEGRAM_WEBHOOK_SECRET,
     )
 
+    await application.bot.set_my_commands([
+        BotCommand("start", "Start the bot"),
+        BotCommand("help", "How to use PaperDrop"),
+        BotCommand("settings", "Kindle email & preferences"),
+        BotCommand("history", "Recent conversions"),
+        BotCommand("status", "Subscription & usage"),
+        BotCommand("subscribe", "Upgrade to Pro"),
+    ])
+
     logger.info(
-        "Webhook set",
+        "Webhook and commands set",
         extra={"webhook_url": webhook_url},
     )
 
