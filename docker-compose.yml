@@ -1,19 +1,6 @@
-services:
-  postgres:
-    image: postgres:18
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: links_to_epub
-    volumes:
-      - postgres_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+name: paperdrop
 
+services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -29,17 +16,14 @@ services:
     build: ./backend
     restart: unless-stopped
     ports:
-      - "8100:8100"
+      - "${APP_PORT:-8040}:${APP_PORT:-8040}"
     env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/links_to_epub
-      REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 1.1.1.1
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -50,15 +34,12 @@ services:
     restart: unless-stopped
     command: uv run arq app.worker.WorkerSettings
     env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/links_to_epub
-      REDIS_URL: redis://redis:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 1.1.1.1
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -68,10 +49,10 @@ services:
     build: ./backend
     command: uv run alembic upgrade head
     env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/links_to_epub
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
     restart: "no"
 
@@ -84,6 +65,5 @@ services:
       - ./landing:/usr/share/nginx/html:ro
 
 volumes:
-  postgres_data:
   redis_data:
   epub_temp:

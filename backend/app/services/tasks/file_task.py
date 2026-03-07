@@ -1,0 +1,219 @@
+"""ARQ task for EPUB/PDF file processing via external APIs."""
+
+import os
+import time
+
+import httpx
+from logs_flow import ErrorCodes, create_logger, format_error
+from sqlalchemy import update
+
+from app.core.config import settings
+from app.core.metrics import ACTIVE_CONVERSIONS, CONVERSION_DURATION_SECONDS, CONVERSIONS_TOTAL
+from app.models.conversion import Conversion, ConversionStatus
+from app.models.user import User
+from app.services.email.kindle_sender import send_to_kindle
+
+logger = create_logger(service="file-task")
+
+
+async def process_file(
+    ctx: dict,
+    user_id: int,
+    chat_id: int,
+    message_id: int,
+    file_bytes: bytes,
+    filename: str,
+    file_type: str,
+) -> None:
+    """Process an EPUB or PDF file upload.
+
+    Steps:
+        1. Create Conversion record
+        2. Call EPUB Fixer or PDF-to-EPUB API
+        3. Send result EPUB via Telegram
+        4. Send to Kindle if configured
+        5. Update records, clean up
+    """
+    start_time = time.monotonic()
+    session_factory = ctx["session_factory"]
+    bot = ctx["bot"]
+    title = os.path.splitext(filename)[0]
+
+    logger.info(
+        "File job started",
+        extra={
+            "user_id": user_id,
+            "filename": filename,
+            "file_type": file_type,
+            "file_size_bytes": len(file_bytes),
+        },
+    )
+
+    # 1. Create conversion record
+    async with session_factory() as session:
+        conversion = Conversion(
+            user_id=user_id,
+            url=f"file://{filename}",
+            title=title,
+            status=ConversionStatus.PROCESSING.value,
+        )
+        session.add(conversion)
+        await session.commit()
+        await session.refresh(conversion)
+        conversion_id = conversion.id
+
+    epub_path: str | None = None
+    ACTIVE_CONVERSIONS.inc()
+
+    try:
+        # 2. Call external API
+        if file_type == "epub":
+            api_url = settings.EPUB_FIXER_URL
+            mime = "application/epub+zip"
+        else:
+            api_url = settings.PDF_TO_EPUB_URL
+            mime = "application/pdf"
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            files = {"file": (filename, file_bytes, mime)}
+            data = {"mode": "reflow", "author": "Unknown"} if file_type == "pdf" else None
+            response = await client.post(api_url, files=files, data=data)
+            response.raise_for_status()
+            epub_bytes = response.content
+
+        # 3. Save to temp file
+        output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")
+        os.makedirs(output_dir, exist_ok=True)
+        output_filename = f"{title}.epub"
+        epub_path = os.path.join(output_dir, output_filename)
+        with open(epub_path, "wb") as f:
+            f.write(epub_bytes)
+
+        file_size = len(epub_bytes)
+
+        # 4. Update conversion record
+        async with session_factory() as session:
+            await session.execute(
+                update(Conversion)
+                .where(Conversion.id == conversion_id)
+                .values(
+                    title=title,
+                    file_size_bytes=file_size,
+                    status=ConversionStatus.COMPLETED.value,
+                )
+            )
+            await session.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(total_conversions=User.total_conversions + 1)
+            )
+            await session.commit()
+
+        # 5. Send EPUB via Telegram
+        with open(epub_path, "rb") as epub_file:
+            await bot.send_document(
+                chat_id=chat_id,
+                document=epub_file,
+                filename=output_filename,
+                reply_to_message_id=message_id,
+            )
+
+        # 6. Send to Kindle if configured
+        async with session_factory() as session:
+            user_result = await session.get(User, user_id)
+            kindle_email = user_result.kindle_email if user_result else None
+
+        if kindle_email:
+            sent = await send_to_kindle(
+                kindle_email=kindle_email,
+                epub_path=epub_path,
+                title=title,
+            )
+            if sent:
+                status_text = f"Delivered to Kindle ({kindle_email})"
+            else:
+                status_text = (
+                    f"Failed to deliver to Kindle ({kindle_email}). "
+                    "The EPUB is available above — you can forward it manually."
+                )
+                logger.warning(
+                    "Kindle delivery failed",
+                    extra={"user_id": user_id, "kindle_email": kindle_email},
+                )
+            await bot.send_message(
+                chat_id=chat_id,
+                text=status_text,
+                reply_to_message_id=message_id,
+            )
+
+        elapsed = time.monotonic() - start_time
+        CONVERSIONS_TOTAL.labels(status="completed").inc()
+        CONVERSION_DURATION_SECONDS.observe(elapsed)
+        logger.info(
+            "File job completed",
+            extra={
+                "conversion_id": conversion_id,
+                "user_id": user_id,
+                "filename": filename,
+                "file_type": file_type,
+                "file_size_bytes": file_size,
+                "elapsed_seconds": round(elapsed, 2),
+            },
+        )
+
+    except Exception as exc:
+        elapsed = time.monotonic() - start_time
+        CONVERSIONS_TOTAL.labels(status="failed").inc()
+        CONVERSION_DURATION_SECONDS.observe(elapsed)
+        error_msg = str(exc)[:500]
+
+        logger.error(
+            "File job failed",
+            extra={
+                "conversion_id": conversion_id,
+                "user_id": user_id,
+                "filename": filename,
+                "file_type": file_type,
+                "elapsed_seconds": round(elapsed, 2),
+                **format_error(exc),
+            },
+            error_code=ErrorCodes.INT_UNEXPECTED,
+        )
+
+        async with session_factory() as session:
+            await session.execute(
+                update(Conversion)
+                .where(Conversion.id == conversion_id)
+                .values(
+                    status=ConversionStatus.FAILED.value,
+                    error_message=error_msg,
+                )
+            )
+            await session.commit()
+
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"Failed to process your file. Please try again later.\n\nError: {error_msg}",
+                reply_to_message_id=message_id,
+            )
+        except Exception as notify_exc:
+            logger.error(
+                "Failed to send error notification",
+                extra={"chat_id": chat_id, **format_error(notify_exc)},
+                error_code=ErrorCodes.API_UNAVAILABLE,
+            )
+
+    finally:
+        ACTIVE_CONVERSIONS.dec()
+        if epub_path and os.path.exists(epub_path):
+            try:
+                os.remove(epub_path)
+                output_dir = os.path.dirname(epub_path)
+                if os.path.isdir(output_dir) and not os.listdir(output_dir):
+                    os.rmdir(output_dir)
+            except OSError as cleanup_exc:
+                logger.warning(
+                    "Failed to delete temp file",
+                    extra={"epub_path": epub_path, **format_error(cleanup_exc)},
+                )

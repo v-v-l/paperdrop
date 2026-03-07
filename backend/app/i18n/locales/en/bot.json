@@ -1,6 +1,6 @@
 {
-    "welcome": "Welcome to PaperDrop!\n\nSend me any article URL and I'll convert it to an EPUB file.\n\nCommands:\n/help - Usage instructions\n/settings - Open settings\n/history - Recent conversions\n/status - Subscription status\n/subscribe - Upgrade to premium",
-    "help": "How to use this bot:\n\n1. Send me a link to any article or web page\n2. I'll convert it to EPUB format\n3. You'll receive the file right here in the chat\n\nSend to Kindle: Set your Kindle email in /settings and we'll deliver EPUBs straight to your Kindle library.\n\nSupported: any public web page with article content.\n\nPrivacy: Your files are deleted immediately after sending. We only store metadata (URL, title, timestamps) for your conversion history.\n\nDisclaimer: This bot is provided as-is. Content conversion depends on the source page structure and may not always produce perfect results.",
+    "welcome": "Welcome to PaperDrop!\n\nSend me:\n- A link to any article\n- An EPUB file (I'll fix it for Kindle)\n- A PDF file (I'll convert it to EPUB)\n\nCommands:\n/help - Usage instructions\n/settings - Open settings\n/history - Recent conversions\n/status - Subscription status\n/subscribe - Upgrade to premium",
+    "help": "How to use this bot:\n\n1. Send a link, EPUB, or PDF\n2. I'll convert it to a Kindle-ready EPUB\n3. You'll receive the file right here in the chat\n\nSupported inputs:\n- Article URLs (any public web page)\n- EPUB files (fixes Apple Books exports for Kindle)\n- PDF files (converts to reflowable EPUB)\n\nSend to Kindle: Set your Kindle email in /settings and we'll deliver EPUBs straight to your Kindle library.\n\nPrivacy: Your files are deleted immediately after sending. We only store metadata (URL, title, timestamps) for your conversion history.\n\nDisclaimer: This bot is provided as-is. Conversion quality depends on the source format.",
     "settings_message": "Tap the button below to open settings:",
     "settings_button": "Open Settings",
     "history_empty": "You have no conversions yet. Send me a URL to get started!",
@@ -20,6 +20,11 @@
     "invalid_url": "This URL doesn't look valid. Please send a link starting with http:// or https:// to a public web page.",
     "rate_limited": "You're converting too fast! Please try again in {minutes} minute{plural}.",
     "error_generic": "Something went wrong. Please try again later.",
+    "file_processing_epub": "Got your EPUB! Checking and preparing for Kindle...",
+    "file_processing_pdf": "Got your PDF! Converting to EPUB... This may take a moment.",
+    "epub_invalid_format": "This doesn't look like a valid EPUB file.",
+    "epub_drm_protected": "This EPUB is DRM-protected. Only DRM-free EPUBs can be processed.",
+    "pdf_invalid_format": "This doesn't look like a valid PDF file.",
     "kindle_sent": "Sent to your Kindle ({email})",
     "kindle_setup_hint": "To receive articles on your Kindle:\n\n1. Find your Send-to-Kindle email at:\namazon.com/sendtokindle\n(Manage Your Content & Devices > Preferences > Personal Document Settings)\n\n2. Add {sender_email} to your Approved Personal Document E-mail List (same page)\n\n3. That's it! We'll email EPUBs to your Kindle automatically."
 }

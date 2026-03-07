@@ -8,7 +8,7 @@ from arq.connections import RedisSettings
 from logs_flow import create_logger, format_error, ErrorCodes
 
 from app.core.config import settings
-from app.services.tasks import process_conversion
+from app.services.tasks import process_conversion, process_file
 
 logger = create_logger(service="arq-worker")
 
@@ -95,7 +95,7 @@ async def shutdown(ctx: dict) -> None:
 class WorkerSettings:
     """ARQ worker configuration."""
 
-    functions = [process_conversion]
+    functions = [process_conversion, process_file]
     redis_settings = parse_redis_settings(settings.REDIS_URL)
     on_startup = startup
     on_shutdown = shutdown

@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     SENDER_EMAIL: str = "send@paperdrop.bp-flow.com"
 
+    # File processing APIs
+    EPUB_FIXER_URL: str = "http://192.168.100.70:8010/convert"
+    PDF_TO_EPUB_URL: str = "http://host.docker.internal:8100/api/convert"
+
     # Playwright
     PLAYWRIGHT_ENABLED: bool = True
 
@@ -46,8 +50,8 @@ class Settings(BaseSettings):
     MINI_APP_URL: str = "https://localhost:3100"
 
     # Application
-    APP_PORT: int = 8100
-    BASE_URL: str = "http://localhost:8100"
+    APP_PORT: int = 8040
+    BASE_URL: str = "http://localhost:8040"
     TEMP_DIR: str = "/tmp/links_to_epub"
     LOG_LEVEL: str = "INFO"
 

@@ -23,7 +23,7 @@ from app.services.payments.subscription_service import (
     create_subscription,
 )
 from app.services.rate_limiter import check_rate_limit
-from app.services.tasks import enqueue_conversion
+from app.services.tasks import enqueue_conversion, enqueue_file
 from app.services.telegram.url_utils import extract_urls, is_valid_url
 
 logger = create_logger(service="telegram-handlers")
@@ -354,6 +354,137 @@ async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             "url_count": len(valid_urls),
             "urls": valid_urls,
         },
+    )
+
+
+# -- Document Handlers --
+
+
+def _validate_epub(file_bytes: bytes) -> str | None:
+    """Validate EPUB file. Returns error i18n key or None if valid."""
+    import io
+    import zipfile
+
+    if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+        return "epub_invalid_format"
+
+    with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as zf:
+        names = zf.namelist()
+        if "mimetype" not in names:
+            return "epub_invalid_format"
+
+        if "META-INF/encryption.xml" in names:
+            encryption_xml = zf.read("META-INF/encryption.xml").decode("utf-8", errors="ignore")
+            if "EncryptedData" in encryption_xml:
+                return "epub_drm_protected"
+
+    return None
+
+
+def _validate_pdf(file_bytes: bytes) -> str | None:
+    """Validate PDF file. Returns error i18n key or None if valid."""
+    if not file_bytes[:5] == b"%PDF-":
+        return "pdf_invalid_format"
+    return None
+
+
+async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle EPUB and PDF file attachments."""
+    message = update.message
+    if not message or not message.document:
+        return
+
+    doc = message.document
+    filename = doc.file_name or "file"
+    lower_name = filename.lower()
+
+    # Determine file type
+    if lower_name.endswith(".epub") or doc.mime_type == "application/epub+zip":
+        file_type = "epub"
+    elif lower_name.endswith(".pdf") or doc.mime_type == "application/pdf":
+        file_type = "pdf"
+    else:
+        return
+
+    # Ensure user exists
+    async with async_session_factory() as session:
+        user = await _get_or_create_user(session, update)
+
+    # Rate limit + eligibility checks (same as URL handler)
+    try:
+        redis = await _get_redis_pool()
+    except Exception as exc:
+        logger.error(
+            "Failed to connect to Redis",
+            extra={"user_id": user.id, **format_error(exc)},
+            error_code=ErrorCodes.INT_UNEXPECTED,
+        )
+        await message.reply_text(_t(update, "error_generic"))
+        return
+
+    try:
+        is_paid = _has_active_subscription(user)
+        max_requests = settings.RATE_LIMIT_PAID_MAX if is_paid else settings.RATE_LIMIT_FREE_MAX
+        window_seconds = settings.RATE_LIMIT_PAID_WINDOW if is_paid else settings.RATE_LIMIT_FREE_WINDOW
+
+        rate_allowed, seconds_until_reset = await check_rate_limit(
+            redis=redis, user_id=user.id,
+            max_requests=max_requests, window_seconds=window_seconds,
+        )
+        if not rate_allowed:
+            minutes = max(1, seconds_until_reset // 60)
+            plural = "s" if minutes != 1 else ""
+            await message.reply_text(_t(update, "rate_limited", minutes=minutes, plural=plural))
+            return
+
+        async with async_session_factory() as session:
+            allowed, reason = await can_convert(session, user.id)
+        if not allowed:
+            await message.reply_text(_t(update, "free_limit_reached", limit=settings.FREE_TIER_LIMIT))
+            return
+
+        # Download file from Telegram
+        tg_file = await doc.get_file()
+        file_bytes = bytes(await tg_file.download_as_bytearray())
+
+        # Validate
+        if file_type == "epub":
+            error_key = _validate_epub(file_bytes)
+        else:
+            error_key = _validate_pdf(file_bytes)
+
+        if error_key:
+            await message.reply_text(_t(update, error_key))
+            return
+
+        # Acknowledge
+        ack_key = "file_processing_epub" if file_type == "epub" else "file_processing_pdf"
+        await message.reply_text(_t(update, ack_key))
+
+        # Enqueue
+        await enqueue_file(
+            redis=redis,
+            user_id=user.id,
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+            file_bytes=file_bytes,
+            filename=filename,
+            file_type=file_type,
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to process file upload",
+            extra={"user_id": user.id, "filename": filename, **format_error(exc)},
+            error_code=ErrorCodes.INT_UNEXPECTED,
+        )
+        await message.reply_text(_t(update, "error_generic"))
+        return
+    finally:
+        await redis.close()
+
+    logger.info(
+        "File enqueued",
+        extra={"user_id": user.id, "filename": filename, "file_type": file_type},
     )
 
 

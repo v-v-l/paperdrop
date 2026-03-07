@@ -6,6 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckou
 
 from app.core.config import settings
 from app.services.telegram.handlers import (
+    document_handler,
     help_command,
     history_command,
     pre_checkout_handler,
@@ -49,6 +50,11 @@ def create_bot_application() -> Application:
     application.add_handler(
         MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler)
     )
+
+    # Register document handler for EPUB/PDF files
+    epub_filter = filters.Document.MimeType("application/epub+zip") | filters.Document.FileExtension("epub")
+    pdf_filter = filters.Document.MimeType("application/pdf") | filters.Document.FileExtension("pdf")
+    application.add_handler(MessageHandler(epub_filter | pdf_filter, document_handler))
 
     # Register message handler for URLs (plain text messages, not commands)
     application.add_handler(
