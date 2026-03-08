@@ -30,12 +30,15 @@ def create_bot_application() -> Application:
     Returns:
         Configured Application instance.
     """
-    application = (
+    builder = (
         Application.builder()
         .token(settings.TELEGRAM_BOT_TOKEN)
+        .base_url(settings.TELEGRAM_API_BASE_URL)
+        .base_file_url(settings.TELEGRAM_API_BASE_FILE_URL)
+        .local_mode(settings.TELEGRAM_LOCAL_MODE)
         .updater(None)  # Webhook mode: no polling updater
-        .build()
     )
+    application = builder.build()
 
     # Register command handlers (priority: commands first)
     application.add_handler(CommandHandler("start", start_command))

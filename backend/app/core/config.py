@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_URL: str = ""
     TELEGRAM_WEBHOOK_SECRET: str = ""
     TELEGRAM_PAYMENT_PROVIDER_TOKEN: str = ""
+    TELEGRAM_API_BASE_URL: str = "https://api.telegram.org/bot"
+    TELEGRAM_API_BASE_FILE_URL: str = "https://api.telegram.org/file/bot"
+    TELEGRAM_LOCAL_MODE: bool = False
+    TELEGRAM_MAX_FILE_SIZE: int = 104857600  # 100 MB
 
     # Subscription
     SUBSCRIPTION_PRICE_STARS: int = 250  # Telegram Stars (~$4.99)

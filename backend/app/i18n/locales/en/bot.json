@@ -25,6 +25,7 @@
     "epub_invalid_format": "This doesn't look like a valid EPUB file.",
     "epub_drm_protected": "This EPUB is DRM-protected. Only DRM-free EPUBs can be processed.",
     "pdf_invalid_format": "This doesn't look like a valid PDF file.",
+    "file_too_big": "This file is too large (max 100 MB). Please try a smaller file.",
     "kindle_sent": "Sent to your Kindle ({email})",
     "kindle_setup_hint": "To receive articles on your Kindle:\n\n1. Find your Send-to-Kindle email at:\namazon.com/sendtokindle\n(Manage Your Content & Devices > Preferences > Personal Document Settings)\n\n2. Add {sender_email} to your Approved Personal Document E-mail List (same page)\n\n3. That's it! We'll email EPUBs to your Kindle automatically."
 }

@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PaperDrop &mdash; Turn any article into a Kindle-ready EPUB</title>
-  <meta name="description" content="Send any article URL to our Telegram bot and get a clean, image-rich EPUB back instantly. Perfect for Kindle, Kobo, and any e-reader.">
+  <title>PaperDrop &mdash; Never forget &ldquo;read later&rdquo; again</title>
+  <meta name="description" content="Send articles, EPUBs, or PDFs to our Telegram bot — everything lands on your Kindle in seconds. Never lose a &ldquo;read later&rdquo; link again.">
   <meta name="robots" content="index, follow">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="PaperDrop &mdash; Articles to Kindle-ready EPUB">
-  <meta property="og:description" content="Send any article URL to our Telegram bot and get a clean, image-rich EPUB back instantly. No files stored. Your privacy respected.">
-  <meta property="og:url" content="https://linkstoepub.com">
+  <meta property="og:title" content="PaperDrop &mdash; Articles, EPUBs &amp; PDFs to Kindle in seconds">
+  <meta property="og:description" content="Send articles, EPUBs, or PDFs to our Telegram bot and get a Kindle-ready EPUB back instantly. Automatic Kindle delivery included.">
+  <meta property="og:url" content="https://paperdrop.bp-flow.com">
   <meta property="og:site_name" content="PaperDrop">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="PaperDrop &mdash; Articles to Kindle-ready EPUB">
-  <meta name="twitter:description" content="Send any article URL to our Telegram bot and get a clean EPUB with images preserved.">
+  <meta name="twitter:title" content="PaperDrop &mdash; Articles, EPUBs &amp; PDFs to Kindle in seconds">
+  <meta name="twitter:description" content="Send articles, EPUBs, or PDFs to our Telegram bot. Automatic Kindle delivery included.">
 
   <link rel="icon" href="favicon.ico" type="image/x-icon">
   <link rel="stylesheet" href="style.css">
@@ -39,10 +39,10 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <h1>Turn any article into a<br>Kindle-ready EPUB</h1>
+      <h1>Never forget &ldquo;read later&rdquo; again</h1>
       <p class="subheadline">
-        Send a link to our Telegram bot and get a clean EPUB file in seconds.
-        Images preserved, formatting intact &mdash; unlike Kindle's built-in browser.
+        Send a link, EPUB, or PDF to our Telegram bot &mdash; it lands on your Kindle in seconds.
+        Articles, books, reports &mdash; everything in one place, ready to read.
       </p>
       <a href="https://t.me/PaperDrop_bot" class="btn btn-primary">Open in Telegram</a>
     </div>
@@ -52,7 +52,7 @@
   <section id="how-it-works">
     <div class="container">
       <h2 class="section-title">How it works</h2>
-      <p class="section-subtitle">Three steps. No app to install. No account to create.</p>
+      <p class="section-subtitle">No app to install. No account to create.</p>
       <div class="steps">
         <div class="step">
           <div class="step-number">1</div>
@@ -61,13 +61,38 @@
         </div>
         <div class="step">
           <div class="step-number">2</div>
-          <h3>Send a URL</h3>
-          <p>Paste any article link. Blog posts, news articles, documentation &mdash; we handle it all.</p>
+          <h3>Send anything</h3>
+          <p>Paste an article link, drop an EPUB, or send a PDF. We handle all three.</p>
         </div>
         <div class="step">
           <div class="step-number">3</div>
-          <h3>Get your EPUB</h3>
-          <p>Receive a beautifully formatted EPUB file ready for your Kindle, Kobo, or any e-reader.</p>
+          <h3>Read on Kindle</h3>
+          <p>Get your EPUB in chat instantly. Set up Send-to-Kindle and we'll deliver it automatically.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- What you can send -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <h2 class="section-title">What you can send</h2>
+      <p class="section-subtitle">Three input types, one clean EPUB output.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">&#128279;</div>
+          <h3>Article URLs</h3>
+          <p>Blog posts, news articles, documentation &mdash; we extract the content, preserve images, and build a clean EPUB.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">&#128214;</div>
+          <h3>EPUB files</h3>
+          <p>Got an EPUB that doesn't render well on Kindle? We fix formatting issues so it looks great on any e-reader.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">&#128196;</div>
+          <h3>PDF files</h3>
+          <p>Send any PDF (up to 100 MB) and get a reflowable EPUB &mdash; no more pinching and zooming on your Kindle.</p>
         </div>
       </div>
     </div>
@@ -93,8 +118,13 @@
             <td class="check">Yes</td>
           </tr>
           <tr>
-            <td>Full article extraction</td>
-            <td class="cross">Partial</td>
+            <td>Accepts URLs, EPUBs &amp; PDFs</td>
+            <td class="cross">URLs only</td>
+            <td class="check">All three</td>
+          </tr>
+          <tr>
+            <td>Auto Kindle delivery</td>
+            <td class="check">Yes</td>
             <td class="check">Yes</td>
           </tr>
           <tr>
@@ -113,8 +143,8 @@
             <td class="check">EPUB (universal)</td>
           </tr>
           <tr>
-            <td>Clean formatting</td>
-            <td class="cross">Inconsistent</td>
+            <td>PDF to reflowable text</td>
+            <td class="cross">No</td>
             <td class="check">Yes</td>
           </tr>
         </tbody>
@@ -133,22 +163,22 @@
           <div class="pricing-price">$0</div>
           <div class="pricing-period">forever</div>
           <ul class="pricing-features">
-            <li>5 conversions per month</li>
-            <li>Full article extraction</li>
+            <li>5 conversions total</li>
+            <li>URLs, EPUBs &amp; PDFs</li>
+            <li>Send-to-Kindle delivery</li>
             <li>Images preserved</li>
-            <li>Standard processing</li>
           </ul>
           <a href="https://t.me/PaperDrop_bot" class="btn btn-primary">Get started</a>
         </div>
         <div class="pricing-card featured">
           <h3>Pro</h3>
-          <div class="pricing-price">$4.99</div>
-          <div class="pricing-period">per month</div>
+          <div class="pricing-price">250 Stars</div>
+          <div class="pricing-period">per month (~$4.99)</div>
           <ul class="pricing-features">
             <li>Unlimited conversions</li>
-            <li>Full article extraction</li>
-            <li>Images preserved</li>
-            <li>Priority processing</li>
+            <li>URLs, EPUBs &amp; PDFs</li>
+            <li>Send-to-Kindle delivery</li>
+            <li>PDFs up to 100 MB</li>
           </ul>
           <a href="https://t.me/PaperDrop_bot" class="btn btn-accent">Upgrade to Pro</a>
         </div>
@@ -181,8 +211,8 @@
   <!-- CTA -->
   <section class="cta-section">
     <div class="container">
-      <h2>Ready to read articles your way?</h2>
-      <p>Open the bot in Telegram and send your first link. It takes 10 seconds.</p>
+      <h2>Stop bookmarking. Start reading.</h2>
+      <p>Open the bot in Telegram and send your first link. It'll be on your Kindle in seconds.</p>
       <a href="https://t.me/PaperDrop_bot" class="btn btn-primary">Open in Telegram</a>
     </div>
   </section>
@@ -193,7 +223,7 @@
       <ul class="footer-links">
         <li><a href="privacy.html">Privacy Policy</a></li>
         <li><a href="terms.html">Terms of Service</a></li>
-        <li><a href="mailto:contact@linkstoepub.com">Contact</a></li>
+        <li><a href="https://t.me/PaperDrop_bot">Contact</a></li>
       </ul>
       <p>&copy; 2026 PaperDrop. All rights reserved.</p>
     </div>

@@ -9,6 +9,7 @@ from logs_flow import ErrorCodes, create_logger, format_error
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Update, WebAppInfo
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from app.core.config import settings
@@ -406,6 +407,11 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     else:
         return
 
+    # Check file size limit
+    if doc.file_size and doc.file_size > settings.TELEGRAM_MAX_FILE_SIZE:
+        await message.reply_text(_t(update, "file_too_big"))
+        return
+
     # Ensure user exists
     async with async_session_factory() as session:
         user = await _get_or_create_user(session, update)
@@ -444,7 +450,13 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
 
         # Download file from Telegram
-        tg_file = await doc.get_file()
+        try:
+            tg_file = await doc.get_file()
+        except BadRequest as exc:
+            if "file is too big" in str(exc).lower():
+                await message.reply_text(_t(update, "file_too_big"))
+                return
+            raise
         file_bytes = bytes(await tg_file.download_as_bytearray())
 
         # Validate
