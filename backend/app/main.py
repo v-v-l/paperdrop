@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
@@ -12,7 +13,7 @@ from app.api.metrics import router as metrics_router
 from app.api.miniapp import router as miniapp_router
 from app.api.webhook import router as webhook_router
 from app.core.config import settings
-from app.core.metrics import HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
+from app.core.metrics import BOT_WEBHOOK_HEALTHY, HTTP_REQUEST_DURATION_SECONDS, HTTP_REQUESTS_TOTAL
 from app.services.telegram.bot import create_bot_application, setup_webhook, shutdown_bot
 
 logger = create_logger(service="links-to-epub")
@@ -41,6 +42,40 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
+WEBHOOK_RETRY_ATTEMPTS = 5
+WEBHOOK_RETRY_BASE_DELAY = 2  # seconds, doubles each attempt
+
+
+async def _setup_webhook_with_retry(application) -> None:
+    """Try to set up the webhook with exponential backoff."""
+    for attempt in range(1, WEBHOOK_RETRY_ATTEMPTS + 1):
+        try:
+            await setup_webhook(application)
+            BOT_WEBHOOK_HEALTHY.set(1)
+            logger.info("Bot webhook setup complete", extra={"attempt": attempt})
+            return
+        except Exception as exc:
+            delay = WEBHOOK_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+            logger.warning(
+                "Webhook setup failed, retrying",
+                extra={
+                    "attempt": attempt,
+                    "max_attempts": WEBHOOK_RETRY_ATTEMPTS,
+                    "retry_in_seconds": delay,
+                    **format_error(exc),
+                },
+            )
+            if attempt < WEBHOOK_RETRY_ATTEMPTS:
+                await asyncio.sleep(delay)
+
+    BOT_WEBHOOK_HEALTHY.set(0)
+    logger.error(
+        "Webhook setup failed after all retries",
+        extra={"attempts": WEBHOOK_RETRY_ATTEMPTS},
+        error_code=ErrorCodes.API_UNAVAILABLE,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage bot lifecycle: setup webhook on startup, clean up on shutdown."""
@@ -48,15 +83,7 @@ async def lifespan(app: FastAPI):
     application = create_bot_application()
     app.state.bot_application = application
 
-    try:
-        await setup_webhook(application)
-        logger.info("Bot webhook setup complete")
-    except Exception as exc:
-        logger.error(
-            "Failed to setup bot webhook",
-            extra=format_error(exc),
-            error_code=ErrorCodes.API_UNAVAILABLE,
-        )
+    await _setup_webhook_with_retry(application)
 
     yield
 
@@ -100,7 +127,11 @@ if os.path.isdir(miniapp_dir):
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    bot_healthy = BOT_WEBHOOK_HEALTHY._value.get() == 1
+    return {
+        "status": "ok" if bot_healthy else "degraded",
+        "bot_webhook": "healthy" if bot_healthy else "unhealthy",
+    }
 
 
 if __name__ == "__main__":

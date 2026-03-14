@@ -44,3 +44,9 @@ ACTIVE_SUBSCRIPTIONS = Gauge(
     "active_subscriptions",
     "Current number of active subscriptions",
 )
+
+# Bot health
+BOT_WEBHOOK_HEALTHY = Gauge(
+    "bot_webhook_healthy",
+    "Whether the bot webhook is set up and functional (1=healthy, 0=unhealthy)",
+)

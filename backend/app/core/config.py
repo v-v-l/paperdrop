@@ -11,6 +11,7 @@ class Settings(BaseSettings):
         env_file=str(_env_file),
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     # Database
