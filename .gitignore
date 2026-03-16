@@ -44,3 +44,4 @@ migrations/versions/__pycache__/
 
 # Playwright
 .playwright-mcp/
+*.pdf
