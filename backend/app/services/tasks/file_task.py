@@ -8,7 +8,12 @@ from logs_flow import ErrorCodes, create_logger, format_error
 from sqlalchemy import update
 
 from app.core.config import settings
-from app.core.metrics import ACTIVE_CONVERSIONS, CONVERSION_DURATION_SECONDS, CONVERSIONS_TOTAL
+from app.core.metrics import (
+    ACTIVE_CONVERSIONS,
+    CONVERSION_DURATION_SECONDS,
+    CONVERSIONS_TOTAL,
+    KINDLE_DELIVERIES_TOTAL,
+)
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
 from app.services.email.kindle_sender import send_to_kindle
@@ -74,10 +79,14 @@ async def process_file(
             api_url = settings.PDF_TO_EPUB_URL
             mime = "application/pdf"
 
+        headers = {}
+        if file_type == "epub" and settings.EPUB_API_KEY:
+            headers["X-API-Key"] = settings.EPUB_API_KEY
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             files = {"file": (filename, file_bytes, mime)}
             data = {"mode": "reflow", "author": "Unknown"} if file_type == "pdf" else None
-            response = await client.post(api_url, files=files, data=data)
+            response = await client.post(api_url, files=files, data=data, headers=headers)
             response.raise_for_status()
             epub_bytes = response.content
 
@@ -130,8 +139,10 @@ async def process_file(
                 title=title,
             )
             if sent:
+                KINDLE_DELIVERIES_TOTAL.labels(status="success").inc()
                 status_text = f"Delivered to Kindle ({kindle_email})"
             else:
+                KINDLE_DELIVERIES_TOTAL.labels(status="failed").inc()
                 status_text = (
                     f"Failed to deliver to Kindle ({kindle_email}). "
                     "The EPUB is available above — you can forward it manually."
@@ -147,8 +158,8 @@ async def process_file(
             )
 
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="completed").inc()
-        CONVERSION_DURATION_SECONDS.observe(elapsed)
+        CONVERSIONS_TOTAL.labels(status="completed", source_type=file_type).inc()
+        CONVERSION_DURATION_SECONDS.labels(source_type=file_type).observe(elapsed)
         logger.info(
             "File job completed",
             extra={
@@ -163,8 +174,8 @@ async def process_file(
 
     except Exception as exc:
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="failed").inc()
-        CONVERSION_DURATION_SECONDS.observe(elapsed)
+        CONVERSIONS_TOTAL.labels(status="failed", source_type=file_type).inc()
+        CONVERSION_DURATION_SECONDS.labels(source_type=file_type).observe(elapsed)
         error_msg = str(exc)[:500]
 
         logger.error(

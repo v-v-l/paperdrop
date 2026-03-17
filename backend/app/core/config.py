@@ -46,6 +46,7 @@ class Settings(BaseSettings):
 
     # File processing APIs
     EPUB_FIXER_URL: str = "http://192.168.100.70:8010/convert"
+    EPUB_API_KEY: str = ""
     PDF_TO_EPUB_URL: str = "http://host.docker.internal:8100/api/convert"
 
     # Playwright

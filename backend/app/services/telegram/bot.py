@@ -3,6 +3,7 @@
 from logs_flow import ErrorCodes, create_logger, format_error
 from telegram import Bot, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters
+from telegram.request import HTTPXRequest
 
 from app.core.config import settings
 from app.services.telegram.handlers import (
@@ -30,12 +31,18 @@ def create_bot_application() -> Application:
     Returns:
         Configured Application instance.
     """
+    request = HTTPXRequest(
+        read_timeout=30,
+        write_timeout=30,
+        connect_timeout=10,
+    )
     builder = (
         Application.builder()
         .token(settings.TELEGRAM_BOT_TOKEN)
         .base_url(settings.TELEGRAM_API_BASE_URL)
         .base_file_url(settings.TELEGRAM_API_BASE_FILE_URL)
         .local_mode(settings.TELEGRAM_LOCAL_MODE)
+        .request(request)
         .updater(None)  # Webhook mode: no polling updater
     )
     application = builder.build()
@@ -54,10 +61,11 @@ def create_bot_application() -> Application:
         MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler)
     )
 
-    # Register document handler for EPUB/PDF files
+    # Register document handler for EPUB/PDF/ZIP files
     epub_filter = filters.Document.MimeType("application/epub+zip") | filters.Document.FileExtension("epub")
     pdf_filter = filters.Document.MimeType("application/pdf") | filters.Document.FileExtension("pdf")
-    application.add_handler(MessageHandler(epub_filter | pdf_filter, document_handler))
+    zip_filter = filters.Document.MimeType("application/zip") | filters.Document.MimeType("application/x-zip-compressed") | filters.Document.FileExtension("zip")
+    application.add_handler(MessageHandler(epub_filter | pdf_filter | zip_filter, document_handler))
 
     # Register message handler for URLs (plain text messages, not commands)
     application.add_handler(
@@ -116,6 +124,20 @@ async def setup_webhook(application: Application) -> None:
         BotCommand("status", "Subscription & usage"),
         BotCommand("subscribe", "Upgrade to Pro"),
     ])
+
+    await application.bot.set_my_short_description(
+        "Send any article, EPUB, or PDF — get a Kindle-ready EPUB back instantly."
+    )
+    await application.bot.set_my_description(
+        "PaperDrop converts articles, EPUBs, and PDFs into Kindle-ready EPUBs.\n\n"
+        "Just send a link, drop a file, and get your EPUB back in seconds. "
+        "Set up your Kindle email in /settings and we'll deliver straight to your library.\n\n"
+        "What it handles:\n"
+        "- Web articles (any public URL)\n"
+        "- EPUB files (fixes broken exports from Apple Books, Calibre, etc.)\n"
+        "- PDF files (converts to reflowable EPUB)\n\n"
+        "Free tier: 5 conversions. Pro: unlimited."
+    )
 
     logger.info(
         "Webhook and commands set",

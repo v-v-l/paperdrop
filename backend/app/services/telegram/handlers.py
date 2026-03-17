@@ -14,6 +14,13 @@ from telegram.ext import ContextTypes
 
 from app.core.config import settings
 from app.core.database import async_session_factory
+from app.core.metrics import (
+    ACTIVE_SUBSCRIPTIONS,
+    BOT_COMMANDS_TOTAL,
+    BOT_NEW_USERS_TOTAL,
+    FREE_TIER_LIMIT_HITS_TOTAL,
+    RATE_LIMIT_HITS_TOTAL,
+)
 from app.i18n import get_text
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -63,6 +70,7 @@ async def _get_or_create_user(
             language_code=tg_user.language_code,
         )
         session.add(user)
+        BOT_NEW_USERS_TOTAL.inc()
     else:
         # Update profile fields on each interaction
         user.username = tg_user.username
@@ -113,6 +121,7 @@ async def _get_redis_pool():
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command: welcome message and upsert user."""
+    BOT_COMMANDS_TOTAL.labels(command="start").inc()
     async with async_session_factory() as session:
         await _get_or_create_user(session, update)
 
@@ -126,11 +135,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command: usage instructions, privacy info, disclaimer."""
+    BOT_COMMANDS_TOTAL.labels(command="help").inc()
     await update.message.reply_text(_t(update, "help"))
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /settings command: inline button that opens the Mini App."""
+    BOT_COMMANDS_TOTAL.labels(command="settings").inc()
     mini_app_url = settings.MINI_APP_URL
     keyboard = InlineKeyboardMarkup(
         [
@@ -150,6 +161,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /history command: show last 10 conversions."""
+    BOT_COMMANDS_TOTAL.labels(command="history").inc()
     async with async_session_factory() as session:
         user = await _get_or_create_user(session, update)
 
@@ -182,6 +194,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /subscribe command: send Stripe invoice or show active subscription."""
+    BOT_COMMANDS_TOTAL.labels(command="subscribe").inc()
     async with async_session_factory() as session:
         user = await _get_or_create_user(session, update)
         is_subscribed = await check_subscription(session, user.id)
@@ -209,6 +222,7 @@ async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /status command: show subscription status and remaining conversions."""
+    BOT_COMMANDS_TOTAL.labels(command="status").inc()
     async with async_session_factory() as session:
         user = await _get_or_create_user(session, update)
 
@@ -298,6 +312,8 @@ async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
         if not rate_allowed:
+            tier = "paid" if is_paid else "free"
+            RATE_LIMIT_HITS_TOTAL.labels(tier=tier).inc()
             minutes = max(1, seconds_until_reset // 60)
             plural = "s" if minutes != 1 else ""
             await message.reply_text(
@@ -310,6 +326,7 @@ async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             allowed, reason = await can_convert(session, user.id)
 
         if not allowed:
+            FREE_TIER_LIMIT_HITS_TOTAL.inc()
             await message.reply_text(
                 _t(update, "free_limit_reached", limit=settings.FREE_TIER_LIMIT)
             )
@@ -382,6 +399,65 @@ def _validate_epub(file_bytes: bytes) -> str | None:
     return None
 
 
+def _extract_epub_from_zip(file_bytes: bytes) -> bytes | None:
+    """Extract an EPUB from a ZIP that contains an exploded .epub folder.
+
+    macOS often treats EPUBs as folders. When users zip them, the result
+    is a ZIP with a nested `book.epub/` directory containing the EPUB files.
+    This function repacks that into a proper EPUB (ZIP with mimetype at root).
+
+    Returns repacked EPUB bytes, or None if no valid EPUB folder found.
+    """
+    import io
+    import zipfile
+
+    if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+        return None
+
+    with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as outer_zip:
+        names = outer_zip.namelist()
+
+        # Find .epub/ directory entries (skip __MACOSX)
+        epub_dirs = [
+            n for n in names
+            if n.endswith(".epub/") and not n.startswith("__MACOSX")
+        ]
+        if not epub_dirs:
+            return None
+
+        prefix = epub_dirs[0]
+
+        # Verify it has mimetype inside
+        if prefix + "mimetype" not in names:
+            return None
+
+        # Repack: strip the prefix, skip __MACOSX, write proper EPUB
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as epub_zip:
+            # mimetype must be first and uncompressed per EPUB spec
+            epub_zip.writestr(
+                "mimetype",
+                outer_zip.read(prefix + "mimetype"),
+                compress_type=zipfile.ZIP_STORED,
+            )
+
+            for entry in names:
+                if entry.startswith("__MACOSX"):
+                    continue
+                if not entry.startswith(prefix):
+                    continue
+                if entry == prefix or entry == prefix + "mimetype":
+                    continue  # skip directory entry and already-written mimetype
+
+                relative_path = entry[len(prefix):]
+                if not relative_path:
+                    continue
+
+                epub_zip.writestr(relative_path, outer_zip.read(entry))
+
+        return output.getvalue()
+
+
 def _validate_pdf(file_bytes: bytes) -> str | None:
     """Validate PDF file. Returns error i18n key or None if valid."""
     if not file_bytes[:5] == b"%PDF-":
@@ -404,6 +480,8 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         file_type = "epub"
     elif lower_name.endswith(".pdf") or doc.mime_type == "application/pdf":
         file_type = "pdf"
+    elif lower_name.endswith(".zip") or doc.mime_type in ("application/zip", "application/x-zip-compressed"):
+        file_type = "zip"
     else:
         return
 
@@ -438,6 +516,8 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             max_requests=max_requests, window_seconds=window_seconds,
         )
         if not rate_allowed:
+            tier = "paid" if is_paid else "free"
+            RATE_LIMIT_HITS_TOTAL.labels(tier=tier).inc()
             minutes = max(1, seconds_until_reset // 60)
             plural = "s" if minutes != 1 else ""
             await message.reply_text(_t(update, "rate_limited", minutes=minutes, plural=plural))
@@ -446,6 +526,7 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         async with async_session_factory() as session:
             allowed, reason = await can_convert(session, user.id)
         if not allowed:
+            FREE_TIER_LIMIT_HITS_TOTAL.inc()
             await message.reply_text(_t(update, "free_limit_reached", limit=settings.FREE_TIER_LIMIT))
             return
 
@@ -459,11 +540,31 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             raise
         file_bytes = bytes(await tg_file.download_as_bytearray())
 
+        # ZIP: check if it's an EPUB (renamed or containing an .epub folder)
+        if file_type == "zip":
+            epub_check = _validate_epub(file_bytes)
+            if epub_check is None:
+                # It's a valid EPUB packaged as .zip
+                file_type = "epub"
+                filename = filename.rsplit(".", 1)[0] + ".epub"
+            else:
+                # Try extracting a nested .epub folder (macOS-zipped EPUB)
+                repacked = _extract_epub_from_zip(file_bytes)
+                if repacked is not None:
+                    file_bytes = repacked
+                    file_type = "epub"
+                    filename = filename.rsplit(".", 1)[0] + ".epub"
+                else:
+                    await message.reply_text(_t(update, "zip_not_epub"))
+                    return
+
         # Validate
         if file_type == "epub":
             error_key = _validate_epub(file_bytes)
-        else:
+        elif file_type == "pdf":
             error_key = _validate_pdf(file_bytes)
+        else:
+            return
 
         if error_key:
             await message.reply_text(_t(update, error_key))
@@ -545,6 +646,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         start_str = subscription.current_period_start.strftime("%Y-%m-%d")
         end_str = subscription.current_period_end.strftime("%Y-%m-%d")
 
+        ACTIVE_SUBSCRIPTIONS.inc()
         await message.reply_text(
             _t(update, "payment_success", start=start_str, end=end_str)
         )

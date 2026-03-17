@@ -7,7 +7,12 @@ from logs_flow import ErrorCodes, create_logger, format_error
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.metrics import ACTIVE_CONVERSIONS, CONVERSION_DURATION_SECONDS, CONVERSIONS_TOTAL
+from app.core.metrics import (
+    ACTIVE_CONVERSIONS,
+    CONVERSION_DURATION_SECONDS,
+    CONVERSIONS_TOTAL,
+    KINDLE_DELIVERIES_TOTAL,
+)
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
 from app.services.conversion import convert_url
@@ -109,8 +114,10 @@ async def process_conversion(
                 title=result.title or "article",
             )
             if sent:
+                KINDLE_DELIVERIES_TOTAL.labels(status="success").inc()
                 status_text = f"Delivered to Kindle ({kindle_email})"
             else:
+                KINDLE_DELIVERIES_TOTAL.labels(status="failed").inc()
                 status_text = (
                     f"Failed to deliver to Kindle ({kindle_email}). "
                     "The EPUB is available above — you can forward it manually."
@@ -126,8 +133,8 @@ async def process_conversion(
             )
 
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="completed").inc()
-        CONVERSION_DURATION_SECONDS.observe(elapsed)
+        CONVERSIONS_TOTAL.labels(status="completed", source_type="url").inc()
+        CONVERSION_DURATION_SECONDS.labels(source_type="url").observe(elapsed)
         logger.info(
             "Job completed",
             extra={
@@ -142,8 +149,8 @@ async def process_conversion(
 
     except Exception as exc:
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="failed").inc()
-        CONVERSION_DURATION_SECONDS.observe(elapsed)
+        CONVERSIONS_TOTAL.labels(status="failed", source_type="url").inc()
+        CONVERSION_DURATION_SECONDS.labels(source_type="url").observe(elapsed)
         error_msg = str(exc)[:500]
 
         logger.error(
