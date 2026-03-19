@@ -47,6 +47,9 @@ class Conversion(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     image_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kindle_status: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
     used_playwright: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )

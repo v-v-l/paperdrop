@@ -15,7 +15,6 @@ from telegram.ext import ContextTypes
 from app.core.config import settings
 from app.core.database import async_session_factory
 from app.core.metrics import (
-    ACTIVE_SUBSCRIPTIONS,
     BOT_COMMANDS_TOTAL,
     BOT_NEW_USERS_TOTAL,
     FREE_TIER_LIMIT_HITS_TOTAL,
@@ -134,9 +133,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /help command: usage instructions, privacy info, disclaimer."""
+    """Handle /help command: usage instructions with Kindle setup guide."""
     BOT_COMMANDS_TOTAL.labels(command="help").inc()
-    await update.message.reply_text(_t(update, "help"))
+    await update.message.reply_text(
+        _t(update, "help", sender_email=settings.SENDER_EMAIL)
+    )
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -646,7 +647,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         start_str = subscription.current_period_start.strftime("%Y-%m-%d")
         end_str = subscription.current_period_end.strftime("%Y-%m-%d")
 
-        ACTIVE_SUBSCRIPTIONS.inc()
         await message.reply_text(
             _t(update, "payment_success", start=start_str, end=end_str)
         )

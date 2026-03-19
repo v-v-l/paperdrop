@@ -7,11 +7,13 @@ from logs_flow import ErrorCodes, create_logger, format_error
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+from app.core.config import settings
 from app.core.metrics import (
     ACTIVE_CONVERSIONS,
     CONVERSION_DURATION_SECONDS,
     CONVERSIONS_TOTAL,
-    KINDLE_DELIVERIES_TOTAL,
 )
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
@@ -113,11 +115,17 @@ async def process_conversion(
                 epub_path=epub_path,
                 title=result.title or "article",
             )
+            kindle_status = "success" if sent else "failed"
+            async with session_factory() as session:
+                await session.execute(
+                    update(Conversion)
+                    .where(Conversion.id == conversion_id)
+                    .values(kindle_status=kindle_status)
+                )
+                await session.commit()
             if sent:
-                KINDLE_DELIVERIES_TOTAL.labels(status="success").inc()
                 status_text = f"Delivered to Kindle ({kindle_email})"
             else:
-                KINDLE_DELIVERIES_TOTAL.labels(status="failed").inc()
                 status_text = (
                     f"Failed to deliver to Kindle ({kindle_email}). "
                     "The EPUB is available above — you can forward it manually."
@@ -129,6 +137,25 @@ async def process_conversion(
             await bot.send_message(
                 chat_id=chat_id,
                 text=status_text,
+                reply_to_message_id=message_id,
+            )
+        elif user_result and user_result.total_conversions <= 3:
+            hint = (
+                "Want this on your Kindle? It's a one-time setup:\n\n"
+                "1. Open amazon.com/sendtokindle — find your Kindle email\n"
+                f"2. Add {settings.SENDER_EMAIL} to your Approved Senders (same page)\n"
+                "3. Paste your Kindle email below"
+            )
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "Set up Kindle",
+                    web_app=WebAppInfo(url=settings.MINI_APP_URL),
+                )
+            ]])
+            await bot.send_message(
+                chat_id=chat_id,
+                text=hint,
+                reply_markup=keyboard,
                 reply_to_message_id=message_id,
             )
 
