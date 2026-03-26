@@ -10,11 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.core.config import settings
-from app.core.metrics import (
-    ACTIVE_CONVERSIONS,
-    CONVERSION_DURATION_SECONDS,
-    CONVERSIONS_TOTAL,
-)
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
 from app.services.conversion import convert_url
@@ -64,7 +59,6 @@ async def process_conversion(
         conversion_id = conversion.id
 
     epub_path: str | None = None
-    ACTIVE_CONVERSIONS.inc()
 
     try:
         # 2. Run pipeline
@@ -160,8 +154,6 @@ async def process_conversion(
             )
 
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="completed", source_type="url").inc()
-        CONVERSION_DURATION_SECONDS.labels(source_type="url").observe(elapsed)
         logger.info(
             "Job completed",
             extra={
@@ -176,8 +168,6 @@ async def process_conversion(
 
     except Exception as exc:
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="failed", source_type="url").inc()
-        CONVERSION_DURATION_SECONDS.labels(source_type="url").observe(elapsed)
         error_msg = str(exc)[:500]
 
         logger.error(
@@ -223,7 +213,6 @@ async def process_conversion(
             )
 
     finally:
-        ACTIVE_CONVERSIONS.dec()
         # 6. Delete temp file (privacy-first)
         if epub_path and os.path.exists(epub_path):
             try:

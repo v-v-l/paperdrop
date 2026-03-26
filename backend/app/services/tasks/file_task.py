@@ -9,11 +9,6 @@ from sqlalchemy import update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.core.config import settings
-from app.core.metrics import (
-    ACTIVE_CONVERSIONS,
-    CONVERSION_DURATION_SECONDS,
-    CONVERSIONS_TOTAL,
-)
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
 from app.services.email.kindle_sender import send_to_kindle
@@ -68,7 +63,6 @@ async def process_file(
         conversion_id = conversion.id
 
     epub_path: str | None = None
-    ACTIVE_CONVERSIONS.inc()
 
     try:
         # 2. Call external API
@@ -183,8 +177,6 @@ async def process_file(
             )
 
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="completed", source_type=file_type).inc()
-        CONVERSION_DURATION_SECONDS.labels(source_type=file_type).observe(elapsed)
         logger.info(
             "File job completed",
             extra={
@@ -199,8 +191,6 @@ async def process_file(
 
     except Exception as exc:
         elapsed = time.monotonic() - start_time
-        CONVERSIONS_TOTAL.labels(status="failed", source_type=file_type).inc()
-        CONVERSION_DURATION_SECONDS.labels(source_type=file_type).observe(elapsed)
         error_msg = str(exc)[:500]
 
         logger.error(
@@ -241,7 +231,6 @@ async def process_file(
             )
 
     finally:
-        ACTIVE_CONVERSIONS.dec()
         if epub_path and os.path.exists(epub_path):
             try:
                 os.remove(epub_path)
