@@ -451,7 +451,7 @@
             "showPoints": "never",
             "stacking": { "mode": "normal" }
           },
-          "unit": "ops"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -461,12 +461,12 @@
         "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Bot Commands",
+      "title": "Bot Commands (per hour)",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (command) (rate(bot_commands_total[5m]))",
+          "expr": "sum by (command) (increase(bot_commands_total[1h]))",
           "legendFormat": "/{{ command }}",
           "refId": "A"
         }
@@ -533,7 +533,7 @@
             "showPoints": "never",
             "stacking": { "mode": "normal" }
           },
-          "unit": "ops"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -543,12 +543,12 @@
         "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" },
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
-      "title": "Telegram Updates by Type",
+      "title": "Telegram Updates (per hour)",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (update_type) (rate(telegram_updates_total[5m]))",
+          "expr": "sum by (update_type) (increase(telegram_updates_total[1h]))",
           "legendFormat": "{{ update_type }}",
           "refId": "A"
         }
