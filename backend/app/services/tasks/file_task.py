@@ -1,4 +1,4 @@
-"""ARQ task for EPUB/PDF file processing via external APIs."""
+"""ARQ task for EPUB/PDF/MD file processing."""
 
 import os
 import time
@@ -11,6 +11,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from app.core.config import settings
 from app.models.conversion import Conversion, ConversionStatus
 from app.models.user import User
+from app.services.conversion.docx_converter import convert_docx_to_epub
+from app.services.conversion.md_converter import convert_md_to_epub
 from app.services.email.kindle_sender import send_to_kindle
 
 logger = create_logger(service="file-task")
@@ -25,11 +27,11 @@ async def process_file(
     filename: str,
     file_type: str,
 ) -> None:
-    """Process an EPUB or PDF file upload.
+    """Process an EPUB, PDF, or Markdown file upload.
 
     Steps:
         1. Create Conversion record
-        2. Call EPUB Fixer or PDF-to-EPUB API
+        2. Convert to EPUB (external API for EPUB/PDF, local for MD)
         3. Send result EPUB via Telegram
         4. Send to Kindle if configured
         5. Update records, clean up
@@ -65,24 +67,43 @@ async def process_file(
     epub_path: str | None = None
 
     try:
-        # 2. Call external API
-        if file_type == "epub":
-            api_url = settings.EPUB_FIXER_URL
-            mime = "application/epub+zip"
+        # 2. Convert to EPUB
+        if file_type == "md":
+            # Local conversion: Markdown → HTML → EPUB
+            md_text = file_bytes.decode("utf-8")
+            output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")
+            os.makedirs(output_dir, exist_ok=True)
+            local_epub_path = os.path.join(output_dir, f"{title}.epub")
+            convert_md_to_epub(md_text, title, local_epub_path)
+            with open(local_epub_path, "rb") as f:
+                epub_bytes = f.read()
+        elif file_type == "docx":
+            # Local conversion: DOCX → HTML (mammoth) → EPUB with images
+            output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")
+            os.makedirs(output_dir, exist_ok=True)
+            local_epub_path = os.path.join(output_dir, f"{title}.epub")
+            convert_docx_to_epub(file_bytes, title, local_epub_path)
+            with open(local_epub_path, "rb") as f:
+                epub_bytes = f.read()
         else:
-            api_url = settings.PDF_TO_EPUB_URL
-            mime = "application/pdf"
+            # External API for EPUB/PDF
+            if file_type == "epub":
+                api_url = settings.EPUB_FIXER_URL
+                mime = "application/epub+zip"
+            else:
+                api_url = settings.PDF_TO_EPUB_URL
+                mime = "application/pdf"
 
-        headers = {}
-        if file_type == "epub" and settings.EPUB_API_KEY:
-            headers["X-API-Key"] = settings.EPUB_API_KEY
+            headers = {}
+            if file_type == "epub" and settings.EPUB_API_KEY:
+                headers["X-API-Key"] = settings.EPUB_API_KEY
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            files = {"file": (filename, file_bytes, mime)}
-            data = {"mode": "reflow", "author": "Unknown"} if file_type == "pdf" else None
-            response = await client.post(api_url, files=files, data=data, headers=headers)
-            response.raise_for_status()
-            epub_bytes = response.content
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                files = {"file": (filename, file_bytes, mime)}
+                data = {"mode": "reflow", "author": "Unknown"} if file_type == "pdf" else None
+                response = await client.post(api_url, files=files, data=data, headers=headers)
+                response.raise_for_status()
+                epub_bytes = response.content
 
         # 3. Save to temp file
         output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")

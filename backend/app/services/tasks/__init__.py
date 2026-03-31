@@ -32,7 +32,7 @@ async def enqueue_file(
     filename: str,
     file_type: str,
 ) -> None:
-    """Enqueue a file processing job (EPUB fix or PDF conversion) via ARQ."""
+    """Enqueue a file processing job (EPUB fix, PDF conversion, or MD → EPUB) via ARQ."""
     await redis.enqueue_job(
         "process_file",
         user_id=user_id,

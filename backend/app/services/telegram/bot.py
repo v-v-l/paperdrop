@@ -61,11 +61,13 @@ def create_bot_application() -> Application:
         MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler)
     )
 
-    # Register document handler for EPUB/PDF/ZIP files
+    # Register document handler for EPUB/PDF/MD/ZIP files
     epub_filter = filters.Document.MimeType("application/epub+zip") | filters.Document.FileExtension("epub")
     pdf_filter = filters.Document.MimeType("application/pdf") | filters.Document.FileExtension("pdf")
+    md_filter = filters.Document.MimeType("text/markdown") | filters.Document.FileExtension("md")
+    docx_filter = filters.Document.MimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document") | filters.Document.FileExtension("docx")
     zip_filter = filters.Document.MimeType("application/zip") | filters.Document.MimeType("application/x-zip-compressed") | filters.Document.FileExtension("zip")
-    application.add_handler(MessageHandler(epub_filter | pdf_filter | zip_filter, document_handler))
+    application.add_handler(MessageHandler(epub_filter | pdf_filter | md_filter | docx_filter | zip_filter, document_handler))
 
     # Register message handler for URLs (plain text messages, not commands)
     application.add_handler(
@@ -126,16 +128,18 @@ async def setup_webhook(application: Application) -> None:
     ])
 
     await application.bot.set_my_short_description(
-        "Send any article, EPUB, or PDF — get a Kindle-ready EPUB back instantly."
+        "Send any article, document, or ebook — get a Kindle-ready EPUB back instantly."
     )
     await application.bot.set_my_description(
-        "PaperDrop converts articles, EPUBs, and PDFs into Kindle-ready EPUBs.\n\n"
+        "PaperDrop converts articles and documents into Kindle-ready EPUBs.\n\n"
         "Just send a link, drop a file, and get your EPUB back in seconds. "
         "Set up your Kindle email in /settings and we'll deliver straight to your library.\n\n"
         "What it handles:\n"
         "- Web articles (any public URL)\n"
         "- EPUB files (fixes broken exports from Apple Books, Calibre, etc.)\n"
-        "- PDF files (converts to reflowable EPUB)\n\n"
+        "- PDF files (converts to reflowable EPUB)\n"
+        "- Word documents (.docx)\n"
+        "- Markdown files (.md)\n\n"
         "Free tier: 5 conversions. Pro: unlimited."
     )
 

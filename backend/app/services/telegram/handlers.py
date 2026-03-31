@@ -466,6 +466,32 @@ def _validate_pdf(file_bytes: bytes) -> str | None:
     return None
 
 
+def _validate_docx(file_bytes: bytes) -> str | None:
+    """Validate DOCX file. Returns error i18n key or None if valid."""
+    import io
+    import zipfile
+
+    if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+        return "docx_invalid_format"
+
+    with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as zf:
+        if "[Content_Types].xml" not in zf.namelist():
+            return "docx_invalid_format"
+
+    return None
+
+
+def _validate_md(file_bytes: bytes) -> str | None:
+    """Validate Markdown file. Returns error i18n key or None if valid."""
+    try:
+        text = file_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return "md_invalid_format"
+    if not text.strip():
+        return "md_invalid_format"
+    return None
+
+
 async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle EPUB and PDF file attachments."""
     message = update.message
@@ -481,6 +507,10 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         file_type = "epub"
     elif lower_name.endswith(".pdf") or doc.mime_type == "application/pdf":
         file_type = "pdf"
+    elif lower_name.endswith(".md") or doc.mime_type == "text/markdown":
+        file_type = "md"
+    elif lower_name.endswith(".docx") or doc.mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        file_type = "docx"
     elif lower_name.endswith(".zip") or doc.mime_type in ("application/zip", "application/x-zip-compressed"):
         file_type = "zip"
     else:
@@ -564,6 +594,10 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             error_key = _validate_epub(file_bytes)
         elif file_type == "pdf":
             error_key = _validate_pdf(file_bytes)
+        elif file_type == "md":
+            error_key = _validate_md(file_bytes)
+        elif file_type == "docx":
+            error_key = _validate_docx(file_bytes)
         else:
             return
 
@@ -572,7 +606,12 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
 
         # Acknowledge
-        ack_key = "file_processing_epub" if file_type == "epub" else "file_processing_pdf"
+        ack_key = {
+            "epub": "file_processing_epub",
+            "pdf": "file_processing_pdf",
+            "md": "file_processing_md",
+            "docx": "file_processing_docx",
+        }.get(file_type, "file_processing_epub")
         await message.reply_text(_t(update, ack_key))
 
         # Enqueue
