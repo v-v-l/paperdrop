@@ -5,11 +5,15 @@ import time
 
 import httpx
 from logs_flow import ErrorCodes, create_logger, format_error
-from sqlalchemy import update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.core.config import settings
-from app.models.conversion import Conversion, ConversionStatus
+from app.core.db_resilience import (
+    DB_ERRORS,
+    generate_conversion_id,
+    resilient_db_write,
+)
+from app.models.conversion import ConversionStatus
 from app.models.user import User
 from app.services.conversion.docx_converter import convert_docx_to_epub
 from app.services.conversion.md_converter import convert_md_to_epub
@@ -39,7 +43,10 @@ async def process_file(
     start_time = time.monotonic()
     session_factory = ctx["session_factory"]
     bot = ctx["bot"]
+    redis = ctx["redis"]
     title = os.path.splitext(filename)[0]
+
+    conversion_id = generate_conversion_id()
 
     logger.info(
         "File job started",
@@ -51,25 +58,24 @@ async def process_file(
         },
     )
 
-    # 1. Create conversion record
-    async with session_factory() as session:
-        conversion = Conversion(
-            user_id=user_id,
-            url=f"file://{filename}",
-            title=title,
-            status=ConversionStatus.PROCESSING.value,
-        )
-        session.add(conversion)
-        await session.commit()
-        await session.refresh(conversion)
-        conversion_id = conversion.id
+    # 1. Create conversion record (resilient)
+    await resilient_db_write(
+        session_factory, redis,
+        "create_conversion",
+        {
+            "id": conversion_id,
+            "user_id": user_id,
+            "url": f"file://{filename}",
+            "title": title,
+            "status": ConversionStatus.PROCESSING.value,
+        },
+    )
 
     epub_path: str | None = None
 
     try:
         # 2. Convert to EPUB
         if file_type == "md":
-            # Local conversion: Markdown → HTML → EPUB
             md_text = file_bytes.decode("utf-8")
             output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")
             os.makedirs(output_dir, exist_ok=True)
@@ -78,7 +84,6 @@ async def process_file(
             with open(local_epub_path, "rb") as f:
                 epub_bytes = f.read()
         elif file_type == "docx":
-            # Local conversion: DOCX → HTML (mammoth) → EPUB with images
             output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")
             os.makedirs(output_dir, exist_ok=True)
             local_epub_path = os.path.join(output_dir, f"{title}.epub")
@@ -86,7 +91,6 @@ async def process_file(
             with open(local_epub_path, "rb") as f:
                 epub_bytes = f.read()
         else:
-            # External API for EPUB/PDF
             if file_type == "epub":
                 api_url = settings.EPUB_FIXER_URL
                 mime = "application/epub+zip"
@@ -115,23 +119,22 @@ async def process_file(
 
         file_size = len(epub_bytes)
 
-        # 4. Update conversion record
-        async with session_factory() as session:
-            await session.execute(
-                update(Conversion)
-                .where(Conversion.id == conversion_id)
-                .values(
-                    title=title,
-                    file_size_bytes=file_size,
-                    status=ConversionStatus.COMPLETED.value,
-                )
-            )
-            await session.execute(
-                update(User)
-                .where(User.id == user_id)
-                .values(total_conversions=User.total_conversions + 1)
-            )
-            await session.commit()
+        # 4. Update conversion record (resilient)
+        await resilient_db_write(
+            session_factory, redis,
+            "update_conversion",
+            {
+                "id": conversion_id,
+                "title": title,
+                "file_size_bytes": file_size,
+                "status": ConversionStatus.COMPLETED.value,
+            },
+        )
+        await resilient_db_write(
+            session_factory, redis,
+            "increment_user_conversions",
+            {"user_id": user_id},
+        )
 
         # 5. Send EPUB via Telegram
         with open(epub_path, "rb") as epub_file:
@@ -143,9 +146,14 @@ async def process_file(
             )
 
         # 6. Send to Kindle if configured
-        async with session_factory() as session:
-            user_result = await session.get(User, user_id)
-            kindle_email = user_result.kindle_email if user_result else None
+        kindle_email = None
+        user_result = None
+        try:
+            async with session_factory() as session:
+                user_result = await session.get(User, user_id)
+                kindle_email = user_result.kindle_email if user_result else None
+        except DB_ERRORS:
+            logger.warning("DB unavailable for Kindle lookup, skipping delivery")
 
         if kindle_email:
             sent = await send_to_kindle(
@@ -154,13 +162,11 @@ async def process_file(
                 title=title,
             )
             kindle_status = "success" if sent else "failed"
-            async with session_factory() as session:
-                await session.execute(
-                    update(Conversion)
-                    .where(Conversion.id == conversion_id)
-                    .values(kindle_status=kindle_status)
-                )
-                await session.commit()
+            await resilient_db_write(
+                session_factory, redis,
+                "update_conversion",
+                {"id": conversion_id, "kindle_status": kindle_status},
+            )
             if sent:
                 status_text = f"Delivered to Kindle ({kindle_email})"
             else:
@@ -227,16 +233,15 @@ async def process_file(
             error_code=ErrorCodes.INT_UNEXPECTED,
         )
 
-        async with session_factory() as session:
-            await session.execute(
-                update(Conversion)
-                .where(Conversion.id == conversion_id)
-                .values(
-                    status=ConversionStatus.FAILED.value,
-                    error_message=error_msg,
-                )
-            )
-            await session.commit()
+        await resilient_db_write(
+            session_factory, redis,
+            "update_conversion",
+            {
+                "id": conversion_id,
+                "status": ConversionStatus.FAILED.value,
+                "error_message": error_msg,
+            },
+        )
 
         try:
             await bot.send_message(

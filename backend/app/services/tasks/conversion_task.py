@@ -4,13 +4,16 @@ import os
 import time
 
 from logs_flow import ErrorCodes, create_logger, format_error
-from sqlalchemy import update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.core.config import settings
-from app.models.conversion import Conversion, ConversionStatus
+from app.core.db_resilience import (
+    DB_ERRORS,
+    generate_conversion_id,
+    resilient_db_write,
+)
+from app.models.conversion import ConversionStatus
 from app.models.user import User
 from app.services.conversion import convert_url
 from app.services.email.kindle_sender import send_to_kindle
@@ -38,25 +41,26 @@ async def process_conversion(
     start_time = time.monotonic()
     session_factory = ctx["session_factory"]
     bot = ctx["bot"]
+    redis = ctx["redis"]
+
+    conversion_id = generate_conversion_id()
 
     logger.info(
         "Job started",
         extra={"user_id": user_id, "url": url, "chat_id": chat_id},
     )
 
-    async with session_factory() as session:
-        session: AsyncSession
-
-        # 1. Create conversion record
-        conversion = Conversion(
-            user_id=user_id,
-            url=url,
-            status=ConversionStatus.PROCESSING.value,
-        )
-        session.add(conversion)
-        await session.commit()
-        await session.refresh(conversion)
-        conversion_id = conversion.id
+    # 1. Create conversion record (resilient — queued to Redis if DB is down)
+    await resilient_db_write(
+        session_factory, redis,
+        "create_conversion",
+        {
+            "id": conversion_id,
+            "user_id": user_id,
+            "url": url,
+            "status": ConversionStatus.PROCESSING.value,
+        },
+    )
 
     epub_path: str | None = None
 
@@ -66,27 +70,25 @@ async def process_conversion(
         result = await convert_url(url=url, output_dir=output_dir, grayscale=grayscale)
         epub_path = result.epub_path
 
-        # 3. Update conversion record on success
-        async with session_factory() as session:
-            await session.execute(
-                update(Conversion)
-                .where(Conversion.id == conversion_id)
-                .values(
-                    title=result.title,
-                    author=result.author,
-                    file_size_bytes=result.file_size_bytes,
-                    image_count=result.image_count,
-                    used_playwright=result.used_playwright,
-                    status=ConversionStatus.COMPLETED.value,
-                )
-            )
-            # Atomically increment total_conversions
-            await session.execute(
-                update(User)
-                .where(User.id == user_id)
-                .values(total_conversions=User.total_conversions + 1)
-            )
-            await session.commit()
+        # 3. Update conversion record on success (resilient)
+        await resilient_db_write(
+            session_factory, redis,
+            "update_conversion",
+            {
+                "id": conversion_id,
+                "title": result.title,
+                "author": result.author,
+                "file_size_bytes": result.file_size_bytes,
+                "image_count": result.image_count,
+                "used_playwright": result.used_playwright,
+                "status": ConversionStatus.COMPLETED.value,
+            },
+        )
+        await resilient_db_write(
+            session_factory, redis,
+            "increment_user_conversions",
+            {"user_id": user_id},
+        )
 
         # 4. Send EPUB via Telegram
         filename = f"{result.title or 'article'}.epub"
@@ -99,9 +101,14 @@ async def process_conversion(
             )
 
         # 5. Send to Kindle if user has kindle_email configured
-        async with session_factory() as session:
-            user_result = await session.get(User, user_id)
-            kindle_email = user_result.kindle_email if user_result else None
+        kindle_email = None
+        user_result = None
+        try:
+            async with session_factory() as session:
+                user_result = await session.get(User, user_id)
+                kindle_email = user_result.kindle_email if user_result else None
+        except DB_ERRORS:
+            logger.warning("DB unavailable for Kindle lookup, skipping delivery")
 
         if kindle_email:
             sent = await send_to_kindle(
@@ -110,13 +117,11 @@ async def process_conversion(
                 title=result.title or "article",
             )
             kindle_status = "success" if sent else "failed"
-            async with session_factory() as session:
-                await session.execute(
-                    update(Conversion)
-                    .where(Conversion.id == conversion_id)
-                    .values(kindle_status=kindle_status)
-                )
-                await session.commit()
+            await resilient_db_write(
+                session_factory, redis,
+                "update_conversion",
+                {"id": conversion_id, "kindle_status": kindle_status},
+            )
             if sent:
                 status_text = f"Delivered to Kindle ({kindle_email})"
             else:
@@ -182,17 +187,16 @@ async def process_conversion(
             error_code=ErrorCodes.INT_UNEXPECTED,
         )
 
-        # Update conversion to failed
-        async with session_factory() as session:
-            await session.execute(
-                update(Conversion)
-                .where(Conversion.id == conversion_id)
-                .values(
-                    status=ConversionStatus.FAILED.value,
-                    error_message=error_msg,
-                )
-            )
-            await session.commit()
+        # Update conversion to failed (resilient)
+        await resilient_db_write(
+            session_factory, redis,
+            "update_conversion",
+            {
+                "id": conversion_id,
+                "status": ConversionStatus.FAILED.value,
+                "error_message": error_msg,
+            },
+        )
 
         # Notify user of failure
         try:

@@ -4,6 +4,7 @@ Run with: arq backend.app.worker.WorkerSettings
 """
 
 from arq.connections import RedisSettings
+from arq.cron import cron
 
 from logs_flow import create_logger, format_error, ErrorCodes
 
@@ -41,6 +42,7 @@ async def startup(ctx: dict) -> None:
         echo=False,
         pool_size=5,
         max_overflow=10,
+        pool_pre_ping=True,
     )
     session_factory = async_sessionmaker(
         bind=engine,
@@ -92,10 +94,18 @@ async def shutdown(ctx: dict) -> None:
     logger.info("Worker shutdown complete")
 
 
+async def drain_db_queue(ctx: dict) -> None:
+    """Periodic task: replay any DB writes queued during database outages."""
+    from app.core.db_resilience import drain_pending_writes
+
+    await drain_pending_writes(ctx["session_factory"], ctx["redis"])
+
+
 class WorkerSettings:
     """ARQ worker configuration."""
 
     functions = [process_conversion, process_file]
+    cron_jobs = [cron(drain_db_queue, second={0})]
     redis_settings = parse_redis_settings(settings.REDIS_URL)
     on_startup = startup
     on_shutdown = shutdown
