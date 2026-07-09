@@ -43,6 +43,8 @@ EPUB path:
 
 PDF path:
   -> worker: call PDF-to-EPUB API (http://host:PORT/api/convert, reflow mode) -> send EPUB -> Kindle
+     -> if the converter reports low text coverage (scanned/image-only PDF),
+        deliver the original PDF as-is instead of a mostly-empty EPUB
 ```
 
 **Services** (docker-compose):
@@ -52,10 +54,12 @@ PDF path:
 - `landing` — nginx serving static landing page (port 8080)
 - `migrate` — one-shot container running Alembic migrations
 
+**Host topology:** PaperDrop's docker host is `192.168.100.59`. `192.168.100.70` is a *separate* LAN box that runs EPUB Fixer. Services co-located with PaperDrop on `.59` are reached from the worker via `host.docker.internal:<port>` (mapped to host-gateway in docker-compose), NOT via the `.70` IP.
+
 **External services:**
 - PostgreSQL 18 — prod DB at `192.168.100.75:5437/paperdrop_prod`
-- EPUB Fixer — `192.168.100.70:8010` (same machine), `POST /convert`
-- PDF-to-EPUB — not deployed yet, `POST /api/convert` with `mode=reflow`
+- EPUB Fixer — `192.168.100.70:8010` (separate LAN box), `POST /convert`
+- PDF-to-EPUB — deployed on `.59` (PaperDrop's own host, repo `/home/victor/projects/pdf_to_epub`, published `:8110`), reached via `host.docker.internal:8110`, `POST /api/convert` with `mode=reflow`
 - Caddy reverse proxy — separate machine, auto-HTTPS for `paperdrop.bp-flow.com`
 
 ## Project Structure
@@ -143,11 +147,12 @@ Optional:
 - `RESEND_API_KEY` — enables Send-to-Kindle via email (domain must be verified in Resend dashboard)
 - `SENDER_EMAIL` — from address for Kindle emails (default: `send@paperdrop.bp-flow.com`)
 - `EPUB_FIXER_URL` — EPUB Fixer API endpoint (default: `http://192.168.100.70:8010/convert`)
-- `PDF_TO_EPUB_URL` — PDF-to-EPUB API endpoint (default: `http://192.168.100.70:8040/api/convert`)
+- `PDF_TO_EPUB_URL` — PDF-to-EPUB API endpoint (prod: `http://host.docker.internal:8110/api/convert` — service runs on PaperDrop's own host `.59`; code default in `config.py` is `host.docker.internal:8100`)
 - `PLAYWRIGHT_ENABLED` — `true` enables Playwright fallback for JS-heavy pages
 - `MINI_APP_URL` — URL to Mini App (must end with `/`)
 - `SUBSCRIPTION_PRICE_STARS` — Telegram Stars price for Pro (default: 250)
 - `FREE_TIER_LIMIT` — free conversions before paywall (default: 5)
+- `PDF_MIN_TEXT_COVERAGE` — min ratio of pages-with-text below which a PDF is treated as scanned/image-only and delivered as-is instead of a reflowed EPUB (default: 0.40)
 - `APP_PORT` — backend port (default: 8040)
 
 ## Testing
@@ -170,6 +175,8 @@ cd backend && uv run pytest tests/ -x -q
 - `strings.py` is legacy (pre-i18n) — bot handlers use `_t()` with JSON locale files, but strings.py still exists
 - Resend requires domain verification (DNS records: MX, SPF, DKIM) before emails deliver
 - Users must add `SENDER_EMAIL` to their Amazon Approved Personal Document E-mail List for Kindle delivery
-- Worker uses `host.docker.internal` to reach EPUB Fixer/PDF-to-EPUB on the host — configured via `extra_hosts` in docker-compose
-- Port 8040 chosen to avoid conflicts with other services on `192.168.100.70` (8010=epub-fixer, 8100=occupied)
+- Worker reaches PDF-to-EPUB via `host.docker.internal:8110` (same-host, `.59`, via `extra_hosts` host-gateway); EPUB Fixer is reached via its LAN IP `192.168.100.70:8010` (different box). Don't assume both use the same addressing scheme
+- Port map on the `.59` host: 8040=backend, 8080=landing, 8110=pdf-to-epub. (8040 was originally chosen to avoid conflicts; `8100=occupied` was the reason the pdf-to-epub container maps host `:8110` → container `:8100`)
 - File uploads stored as `file://{filename}` in the Conversion `url` field — no migration needed
+- Scanned-PDF fallback relies on a cross-repo header contract: the PDF-to-EPUB service (`pdf_to_epub` repo, `converter_reflow.py` → `web.py`) returns `X-Pages-Processed` and `X-Pages-With-Text`; `file_task._text_coverage()` thresholds them against `PDF_MIN_TEXT_COVERAGE`. Missing headers → no fallback (safe). Don't rename those headers without changing both repos
+- `send_to_kindle()` picks the attachment extension from the file path — it emails `.pdf` as well as `.epub` (Kindle accepts both as personal documents)

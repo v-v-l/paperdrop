@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     EPUB_FIXER_URL: str = "http://192.168.100.70:8010/convert"
     EPUB_API_KEY: str = ""
     PDF_TO_EPUB_URL: str = "http://host.docker.internal:8100/api/convert"
+    # Below this ratio of pages-with-text, treat a PDF as scanned/image-only and
+    # deliver the original PDF instead of a mostly-empty reflowed EPUB.
+    PDF_MIN_TEXT_COVERAGE: float = 0.40
 
     # Playwright
     PLAYWRIGHT_ENABLED: bool = True

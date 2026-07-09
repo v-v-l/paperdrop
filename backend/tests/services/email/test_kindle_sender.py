@@ -53,6 +53,36 @@ async def test_send_to_kindle_success(epub_file):
     assert call_kwargs[1]["json"]["from"] == "send@test.com"
 
 
+async def test_send_to_kindle_uses_pdf_extension():
+    """Attachment filename should follow the source file's extension (PDF fallback)."""
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        f.write(b"%PDF-1.4 fake")
+        pdf_path = f.name
+
+    mock_response = AsyncMock()
+    mock_response.raise_for_status = lambda: None
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    try:
+        with (
+            patch("app.services.email.kindle_sender.settings") as mock_settings,
+            patch("app.services.email.kindle_sender.httpx.AsyncClient", return_value=mock_client),
+        ):
+            mock_settings.RESEND_API_KEY = "re_test_123"
+            mock_settings.SENDER_EMAIL = "send@test.com"
+            result = await send_to_kindle("user@kindle.com", pdf_path, "Scanned Book")
+    finally:
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+    assert result is True
+    payload = mock_client.post.call_args[1]["json"]
+    assert payload["attachments"][0]["filename"] == "Scanned Book.pdf"
+
+
 async def test_send_to_kindle_api_error(epub_file):
     """Should return False when Resend API returns an error."""
     mock_response = AsyncMock()

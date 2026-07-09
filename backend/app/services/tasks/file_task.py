@@ -22,6 +22,22 @@ from app.services.email.kindle_sender import send_to_kindle
 logger = create_logger(service="file-task")
 
 
+def _text_coverage(headers) -> float | None:
+    """Ratio of pages with extractable text, from PDF-to-EPUB response headers.
+
+    Returns None when the converter didn't report the metric (older service or
+    vision mode), so callers skip the scanned-PDF fallback decision entirely.
+    """
+    try:
+        total = int(headers.get("X-Pages-Processed", 0))
+        with_text = int(headers.get("X-Pages-With-Text", total))
+    except (TypeError, ValueError):
+        return None
+    if total <= 0:
+        return None
+    return with_text / total
+
+
 async def process_file(
     ctx: dict,
     user_id: int,
@@ -71,7 +87,8 @@ async def process_file(
         },
     )
 
-    epub_path: str | None = None
+    output_path: str | None = None
+    is_pdf_fallback = False  # scanned PDF that couldn't be reflowed → deliver as-is
 
     try:
         # 2. Convert to EPUB
@@ -109,15 +126,35 @@ async def process_file(
                 response.raise_for_status()
                 epub_bytes = response.content
 
-        # 3. Save to temp file
+            # Scanned/image-only PDF: if too few pages yielded text, the reflowed
+            # EPUB is mostly empty — deliver the original PDF instead (Kindle reads PDFs).
+            if file_type == "pdf":
+                coverage = _text_coverage(response.headers)
+                if coverage is not None and coverage < settings.PDF_MIN_TEXT_COVERAGE:
+                    is_pdf_fallback = True
+                    logger.info(
+                        "PDF reflow produced little text, delivering original PDF",
+                        extra={
+                            "conversion_id": conversion_id,
+                            "user_id": user_id,
+                            "text_coverage": round(coverage, 3),
+                            "threshold": settings.PDF_MIN_TEXT_COVERAGE,
+                        },
+                    )
+
+        # 3. Save the delivery payload — reflowed EPUB, or the original PDF as-is
+        if is_pdf_fallback:
+            delivery_bytes, output_filename = file_bytes, f"{title}.pdf"
+        else:
+            delivery_bytes, output_filename = epub_bytes, f"{title}.epub"
+
         output_dir = os.path.join(ctx["temp_dir"], f"file_{conversion_id}")
         os.makedirs(output_dir, exist_ok=True)
-        output_filename = f"{title}.epub"
-        epub_path = os.path.join(output_dir, output_filename)
-        with open(epub_path, "wb") as f:
-            f.write(epub_bytes)
+        output_path = os.path.join(output_dir, output_filename)
+        with open(output_path, "wb") as f:
+            f.write(delivery_bytes)
 
-        file_size = len(epub_bytes)
+        file_size = len(delivery_bytes)
 
         # 4. Update conversion record (resilient)
         await resilient_db_write(
@@ -136,12 +173,23 @@ async def process_file(
             {"user_id": user_id},
         )
 
-        # 5. Send EPUB via Telegram
-        with open(epub_path, "rb") as epub_file:
+        # 5. Send the document via Telegram
+        with open(output_path, "rb") as doc_file:
             await bot.send_document(
                 chat_id=chat_id,
-                document=epub_file,
+                document=doc_file,
                 filename=output_filename,
+                reply_to_message_id=message_id,
+            )
+
+        if is_pdf_fallback:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    "This looks like a scanned PDF (pages are images with no text "
+                    "layer), so it can't be reflowed into a clean EPUB. I've sent the "
+                    "original PDF instead — your Kindle can open PDFs directly."
+                ),
                 reply_to_message_id=message_id,
             )
 
@@ -158,7 +206,7 @@ async def process_file(
         if kindle_email:
             sent = await send_to_kindle(
                 kindle_email=kindle_email,
-                epub_path=epub_path,
+                file_path=output_path,
                 title=title,
             )
             kindle_status = "success" if sent else "failed"
@@ -257,14 +305,14 @@ async def process_file(
             )
 
     finally:
-        if epub_path and os.path.exists(epub_path):
+        if output_path and os.path.exists(output_path):
             try:
-                os.remove(epub_path)
-                output_dir = os.path.dirname(epub_path)
+                os.remove(output_path)
+                output_dir = os.path.dirname(output_path)
                 if os.path.isdir(output_dir) and not os.listdir(output_dir):
                     os.rmdir(output_dir)
             except OSError as cleanup_exc:
                 logger.warning(
                     "Failed to delete temp file",
-                    extra={"epub_path": epub_path, **format_error(cleanup_exc)},
+                    extra={"output_path": output_path, **format_error(cleanup_exc)},
                 )

@@ -15,14 +15,18 @@ RESEND_API_URL = "https://api.resend.com/emails"
 
 async def send_to_kindle(
     kindle_email: str,
-    epub_path: str,
+    file_path: str,
     title: str,
 ) -> bool:
-    """Send an EPUB file to a Kindle email address via Resend.
+    """Send a document (EPUB or PDF) to a Kindle email address via Resend.
+
+    Kindle accepts both EPUB and PDF as personal documents. The attachment
+    filename extension is derived from ``file_path`` so scanned PDFs that can't
+    be reflowed can still be delivered as-is.
 
     Args:
         kindle_email: The user's @kindle.com address.
-        epub_path: Path to the EPUB file on disk.
+        file_path: Path to the document (.epub or .pdf) on disk.
         title: Article title (used in subject line and filename).
 
     Returns:
@@ -32,9 +36,10 @@ async def send_to_kindle(
         logger.warning("RESEND_API_KEY not configured, skipping Kindle delivery")
         return False
 
-    filename = f"{title or 'article'}.epub"
+    ext = os.path.splitext(file_path)[1] or ".epub"
+    filename = f"{title or 'article'}{ext}"
 
-    with open(epub_path, "rb") as f:
+    with open(file_path, "rb") as f:
         file_content = base64.b64encode(f.read()).decode("utf-8")
 
     payload = {
@@ -67,7 +72,7 @@ async def send_to_kindle(
             extra={
                 "kindle_email": kindle_email,
                 "filename": filename,
-                "file_size_bytes": os.path.getsize(epub_path),
+                "file_size_bytes": os.path.getsize(file_path),
             },
         )
         return True

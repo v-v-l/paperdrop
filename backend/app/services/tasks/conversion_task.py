@@ -113,7 +113,7 @@ async def process_conversion(
         if kindle_email:
             sent = await send_to_kindle(
                 kindle_email=kindle_email,
-                epub_path=epub_path,
+                file_path=epub_path,
                 title=result.title or "article",
             )
             kindle_status = "success" if sent else "failed"
