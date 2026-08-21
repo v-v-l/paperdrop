@@ -104,8 +104,11 @@ async def setup_webhook(application: Application) -> None:
 
     Call this during FastAPI startup.
     """
-    await application.initialize()
-    await application.start()
+    # Retries may re-enter after a partial failure: initialize() is idempotent
+    # but start() raises if the Application is already running.
+    if not application.running:
+        await application.initialize()
+        await application.start()
 
     if not settings.TELEGRAM_WEBHOOK_URL:
         logger.warning("TELEGRAM_WEBHOOK_URL not set, skipping webhook registration. Set it after configuring reverse proxy.")
@@ -161,7 +164,10 @@ async def shutdown_bot(application: Application) -> None:
             error_code=ErrorCodes.API_UNAVAILABLE,
         )
 
-    await application.stop()
+    # Shutdown can run before setup ever succeeded (webhook recovery still
+    # pending); stop() raises when not running, shutdown() raises when it is.
+    if application.running:
+        await application.stop()
     await application.shutdown()
 
     logger.info("Bot shutdown complete")

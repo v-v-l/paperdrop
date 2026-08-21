@@ -1,7 +1,7 @@
 import asyncio
 import os
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,16 +44,21 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 WEBHOOK_RETRY_ATTEMPTS = 5
 WEBHOOK_RETRY_BASE_DELAY = 2  # seconds, doubles each attempt
+WEBHOOK_RECOVERY_MAX_DELAY = 60  # cap for the background recovery loop
 
 
-async def _setup_webhook_with_retry(application) -> None:
-    """Try to set up the webhook with exponential backoff."""
+async def _setup_webhook_with_retry(application) -> bool:
+    """Try to set up the webhook with exponential backoff.
+
+    Bounded so startup cannot hang indefinitely on a dead dependency; callers
+    hand a failure off to _recover_webhook_forever.
+    """
     for attempt in range(1, WEBHOOK_RETRY_ATTEMPTS + 1):
         try:
             await setup_webhook(application)
             BOT_WEBHOOK_HEALTHY.set(1)
             logger.info("Bot webhook setup complete", extra={"attempt": attempt})
-            return
+            return True
         except Exception as exc:
             delay = WEBHOOK_RETRY_BASE_DELAY * (2 ** (attempt - 1))
             logger.warning(
@@ -74,6 +79,35 @@ async def _setup_webhook_with_retry(application) -> None:
         extra={"attempts": WEBHOOK_RETRY_ATTEMPTS},
         error_code=ErrorCodes.API_UNAVAILABLE,
     )
+    return False
+
+
+async def _recover_webhook_forever(application) -> None:
+    """Keep retrying webhook setup in the background until it succeeds.
+
+    On an unattended restart Docker brings every container up in parallel and
+    ignores depends_on, so the local Bot API server can outlast the bounded
+    startup retries. Without this the webhook stays unregistered and the health
+    gauge reads 0 for the life of the process even once the dependency recovers.
+    Costs one background task and one setup attempt per interval while broken;
+    the loop exits on the first success.
+    """
+    delay = WEBHOOK_RETRY_BASE_DELAY
+    attempt = 0
+    while True:
+        await asyncio.sleep(delay)
+        attempt += 1
+        try:
+            await setup_webhook(application)
+            BOT_WEBHOOK_HEALTHY.set(1)
+            logger.info("Bot webhook recovered", extra={"attempt": attempt})
+            return
+        except Exception as exc:
+            delay = min(delay * 2, WEBHOOK_RECOVERY_MAX_DELAY)
+            logger.warning(
+                "Webhook recovery failed, retrying",
+                extra={"attempt": attempt, "retry_in_seconds": delay, **format_error(exc)},
+            )
 
 
 @asynccontextmanager
@@ -83,11 +117,18 @@ async def lifespan(app: FastAPI):
     application = create_bot_application()
     app.state.bot_application = application
 
-    await _setup_webhook_with_retry(application)
+    recovery_task: asyncio.Task | None = None
+    if not await _setup_webhook_with_retry(application):
+        recovery_task = asyncio.create_task(_recover_webhook_forever(application))
 
     yield
 
     # Shutdown
+    if recovery_task is not None and not recovery_task.done():
+        recovery_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await recovery_task
+
     try:
         await shutdown_bot(application)
         logger.info("Bot shutdown complete")
